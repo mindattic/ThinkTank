@@ -642,7 +642,7 @@ public class LlmThinkTankService
             generationConfig = new { maxOutputTokens = GetMaxTokens("gemini", authOverrideJson) }
         };
 
-        var model = GetModel("gemini", authOverrideJson, defaultModel: "gemini-2.0-flash-lite");
+        var model = GetModel("gemini", authOverrideJson, defaultModel: "gemini-2.5-flash");
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GetApiKey("gemini", authOverrideJson)}";
         var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
@@ -734,7 +734,7 @@ public class LlmThinkTankService
     private async Task<string> CallCohere(string providerId, string personalityMarkdown, string? authOverrideJson, string topic, List<SharedTurn> history)
     {
         var messages = BuildOpenAiStyleMessages(providerId, personalityMarkdown, topic, history);
-        var model = GetModel("cohere", authOverrideJson, defaultModel: "command-r-plus");
+        var model = GetModel("cohere", authOverrideJson, defaultModel: "command-a-03-2025");
 
         var payload = new
         {

@@ -101,7 +101,7 @@ public class LlmThinkTankSettingsService
         ProviderAuth["together"] = new ProviderAuthConfig("together", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/Llama-4-Scout-17B-16E-Instruct\",\n  \"maxTokens\": 2048\n}");
         ProviderAuth["openrouter"] = new ProviderAuthConfig("openrouter", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/llama-3.1-8b-instruct\",\n  \"maxTokens\": 2048\n}");
         ProviderAuth["fireworks"] = new ProviderAuthConfig("fireworks", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"accounts/fireworks/models/llama-v3p3-70b-instruct\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["cohere"] = new ProviderAuthConfig("cohere", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"command-r-plus-08-2024\",\n  \"maxTokens\": 2048\n}");
+        ProviderAuth["cohere"] = new ProviderAuthConfig("cohere", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"command-a-03-2025\",\n  \"maxTokens\": 2048\n}");
 
         Templates.AddRange(CreateDefaultTemplates());
 
@@ -252,7 +252,7 @@ public class LlmThinkTankSettingsService
                 ["together"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/Llama-4-Scout-17B-16E-Instruct\",\n  \"maxTokens\": 2048\n}",
                 ["openrouter"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/llama-3.1-8b-instruct\",\n  \"maxTokens\": 2048\n}",
                 ["fireworks"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"accounts/fireworks/models/llama-v3p3-70b-instruct\",\n  \"maxTokens\": 2048\n}",
-                ["cohere"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"command-r-plus-08-2024\",\n  \"maxTokens\": 2048\n}"
+                ["cohere"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"command-a-03-2025\",\n  \"maxTokens\": 2048\n}"
             };
 
             foreach (var (providerId, defaultJson) in defaultAuths)
