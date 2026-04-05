@@ -1,0 +1,2 @@
+# LLMThinkTank Project Rules
+
