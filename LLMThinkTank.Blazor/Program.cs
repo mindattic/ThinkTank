@@ -1,6 +1,7 @@
 using LLMThinkTank.Core.Models;
 using LLMThinkTank.Core.Services;
 using LLMThinkTank.Blazor.Components;
+using MindAttic.LLMVoting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,27 @@ builder.Services.AddSingleton<ChatConversationsService>();
 builder.Services.AddSingleton<HumanNameService>();
 builder.Services.AddSingleton<NameGeneratorService>();
 builder.Services.AddSingleton<LlmThinkTankService>();
+builder.Services.AddLLMVoting(sp =>
+{
+    var settings = sp.GetRequiredService<SettingsService>();
+    var apiKeys = new Dictionary<string, string>();
+    var modelOverrides = new Dictionary<string, string>();
+    foreach (var (id, _) in settings.ProviderAuth)
+    {
+        var key = settings.GetKeyForProvider(id, null);
+        if (!string.IsNullOrWhiteSpace(key))
+            apiKeys[id] = key;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(settings.GetAuthJson(id));
+            if (doc.RootElement.TryGetProperty("model", out var m) && m.GetString() is { Length: > 0 } model)
+                modelOverrides[id] = model;
+        }
+        catch { }
+    }
+    return new VotingConfiguration { ApiKeys = apiKeys, ModelOverrides = modelOverrides };
+});
+builder.Services.AddSingleton<VotingService>();
 
 var app = builder.Build();
 

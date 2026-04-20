@@ -1,6 +1,8 @@
 @page "/thinktank"
 @using Microsoft.AspNetCore.Components.Web
+@using MindAttic.LLMVoting
 @inject LlmThinkTankService ThinkTankService
+@inject VotingService VotingService
 @inject SettingsService Settings
 @inject ChatConversationsService Conversations
 @inject IJSRuntime JS
@@ -50,6 +52,57 @@
                 <div class="dialog-actions" style="margin-top:1rem;">
                     <button class="reset-btn" @onclick="CancelRename">Cancel</button>
                     <button class="start-btn" @onclick="ConfirmRename">Save</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_voteDialogVisible)
+    {
+        <div class="dialog-overlay" @onclick="CancelVoteDialog">
+            <div class="dialog-box" @onclick:stopPropagation>
+                <div class="dialog-title">Call a Vote</div>
+
+                <label class="options-label">Vote Type</label>
+                <div style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                        <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.Consensus)"
+                               @onchange="(() => OnVoteTypeChanged(VoteDialogType.Consensus))" />
+                        Have we reached consensus? (Yes / No)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                        <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.FreeForm)"
+                               @onchange="(() => OnVoteTypeChanged(VoteDialogType.FreeForm))" />
+                        What is our conclusion? (Free-form)
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                        <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.Direction)"
+                               @onchange="(() => OnVoteTypeChanged(VoteDialogType.Direction))" />
+                        What direction next? (Custom options)
+                    </label>
+                </div>
+
+                <label class="options-label">Question</label>
+                <input class="rename-input" @bind="_voteQuestion" @bind:event="oninput" />
+
+                @if (_voteType == VoteDialogType.Direction)
+                {
+                    <label class="options-label" style="margin-top:0.5rem;">Options (comma-separated)</label>
+                    <input class="rename-input" @bind="_voteDirectionOptions" @bind:event="oninput"
+                           placeholder="Option A, Option B, Option C" />
+                }
+
+                @if (!string.IsNullOrEmpty(_voteError))
+                {
+                    <div class="error-msg" style="margin-top:0.5rem;">@_voteError</div>
+                }
+
+                <div class="dialog-actions" style="margin-top:1rem;">
+                    <button class="reset-btn" @onclick="CancelVoteDialog">Cancel</button>
+                    <button class="start-btn" @onclick="SubmitVoteAsync"
+                            disabled="@(string.IsNullOrWhiteSpace(_voteQuestion) || (_voteType == VoteDialogType.Direction && string.IsNullOrWhiteSpace(_voteDirectionOptions)))">
+                        Run Vote
+                    </button>
                 </div>
             </div>
         </div>
@@ -187,6 +240,10 @@
                         <div class="chat-header">
                             <div class="topic-title">@Active.Topic</div>
                             <button class="start-btn" @onclick="ExportTranscript">Export</button>
+                            <button class="start-btn" @onclick="OpenVoteDialog"
+                                    disabled="@(_voteRunning || ActiveState.VotePending || Active.Participants.Count < 2)">
+                                @(_voteRunning ? "Voting…" : "Call Vote")
+                            </button>
                             @if (ActiveState.Running)
                             {
                                 <button class="start-btn" @onclick="ToggleRun">Pause</button>
@@ -208,10 +265,10 @@
                                 @foreach (var msg in ActiveState.Messages)
                                 {
                                     var p = Active.Participants.FirstOrDefault(x => x.ParticipantId == msg.ParticipantId);
-                                    <div class="message-bubble @(p?.ProviderId ?? "") @(msg.IsError ? "error-bubble" : "") @(msg.ParticipantId == "user" ? "user-bubble" : "")">
+                                    <div class="message-bubble @(p?.ProviderId ?? "") @(msg.IsError ? "error-bubble" : "") @(msg.ParticipantId == "user" ? "user-bubble" : "") @(msg.ParticipantId == "vote" ? "vote-bubble" : "")">
                                         <div class="bubble-header">
-                                            <span class="bubble-avatar">@(msg.ParticipantId == "user" ? "👤" : GetProviderAvatar(p?.ProviderId ?? ""))</span>
-                                            <span class="bubble-name">@(msg.ParticipantId == "user" ? "You" : (p?.DisplayName ?? msg.ParticipantId))</span>
+                                            <span class="bubble-avatar">@(msg.ParticipantId == "user" ? "👤" : msg.ParticipantId == "vote" ? "🗳️" : GetProviderAvatar(p?.ProviderId ?? ""))</span>
+                                            <span class="bubble-name">@(msg.ParticipantId == "user" ? "You" : msg.ParticipantId == "vote" ? "Vote Result" : (p?.DisplayName ?? msg.ParticipantId))</span>
                                             <span class="bubble-round">Round @msg.Round</span>
                                         </div>
                                         <div class="bubble-text">@((MarkupString)FormatMessageText(msg.Text))</div>
@@ -578,7 +635,7 @@
         var maxRounds = Active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10;
         while (!state.StopRequested)
         {
-            while (_userChatFocused && !state.StopRequested)
+            while ((_userChatFocused || state.VotePending) && !state.StopRequested)
                 await Task.Delay(50);
 
             round++;
@@ -592,7 +649,7 @@
                 if (state.StopRequested)
                     break;
 
-                while (_userChatFocused && !state.StopRequested)
+                while ((_userChatFocused || state.VotePending) && !state.StopRequested)
                     await Task.Delay(50);
 
                 state.CurrentSpeaker = p.ParticipantId;
@@ -607,7 +664,7 @@
                         _pendingUserTurns.Clear();
                     }
 
-                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown, p.AuthOverrideJson, Active.Topic!, sharedHistory, Active.MaxTokens);
+                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, Active.Topic!, sharedHistory, Active.MaxTokens);
 
                     // If the user injected a message while the API call was in-flight,
                     // discard the stale response and re-call so the participant can pivot.
@@ -621,7 +678,17 @@
                             await Task.Delay(50);
 
                         if (!state.StopRequested)
-                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown, p.AuthOverrideJson, Active.Topic!, sharedHistory, Active.MaxTokens);
+                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, Active.Topic!, sharedHistory, Active.MaxTokens);
+                    }
+
+                    // Strip any participant-initiated vote request from the visible response
+                    string? autoVoteQuestion = null;
+                    var voteMarker = System.Text.RegularExpressions.Regex.Match(response, @"\[REQUEST_VOTE:\s*(.+?)\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (voteMarker.Success)
+                    {
+                        var trimmedQuestion = voteMarker.Groups[1].Value.Trim();
+                        autoVoteQuestion = string.IsNullOrEmpty(trimmedQuestion) ? null : trimmedQuestion;
+                        response = response.Replace(voteMarker.Value, "").Trim();
                     }
 
                     sharedHistory.Add(new SharedTurn
@@ -662,6 +729,9 @@
                     state.StatusEvents.Add(new StatusEvent(DateTimeOffset.UtcNow, $"{p.DisplayName} updated their perspective for this chat."));
                     Active.StatusEvents.Add(new PersistedStatusEvent(DateTimeOffset.UtcNow, $"{p.DisplayName} updated their perspective for this chat."));
                     Conversations.NotifyChanged();
+
+                    if (autoVoteQuestion is not null && !state.StopRequested)
+                        await RunParticipantVoteAsync(state, Active, sharedHistory, autoVoteQuestion, round);
                 }
                 catch (Exception ex)
                 {
@@ -983,6 +1053,7 @@
         public string Topic { get; set; } = "";
         public bool Running { get; set; }
         public bool StopRequested { get; set; }
+        public bool VotePending { get; set; }
         public string? CurrentSpeaker { get; set; }
         public string? Error { get; set; }
         public int TotalTurns { get; set; }
@@ -994,6 +1065,141 @@
     }
 
     private record StatusEvent(DateTimeOffset Timestamp, string Text);
+
+    // ── Vote ──
+
+    private const string VoteRequestInstruction =
+        "\n\n---\nIf this discussion is at a stalemate, include [REQUEST_VOTE: your question] anywhere in your response to trigger an immediate consensus vote among all participants.";
+
+    private async Task RunParticipantVoteAsync(
+        ConversationUiState state,
+        ChatConversation active,
+        List<SharedTurn> sharedHistory,
+        string question,
+        int round)
+    {
+        var ts = DateTimeOffset.UtcNow;
+        state.StatusEvents.Add(new StatusEvent(ts, $"Participant called a vote: \"{question}\""));
+        active.StatusEvents.Add(new PersistedStatusEvent(ts, $"Participant called a vote: \"{question}\""));
+
+        try
+        {
+            var result = await VotingService.VoteAsync(
+                active.Participants, question, active.Topic ?? "",
+                new List<string> { "Yes", "No" }, Quorum.SimpleMajority);
+
+            var voteText = $"[VOTE] Question: {question}\nDecision: {result.Consensus} ({result.ConsensusStrength:P0} agreement)\nSummary: {result.NarrativeSummary}";
+            var voteTurn = new SharedTurn { ModelId = "vote", ModelName = "Vote Result", Text = voteText, Round = round };
+            sharedHistory.Add(voteTurn);
+
+            var msg = new ConversationUiMessage { ParticipantId = "vote", Text = voteText, Round = round };
+            state.Messages.Add(msg);
+            active.Messages.Add(new PersistedMessage("vote", voteText, round, false));
+
+            if (result.QuorumReached)
+            {
+                var notice = $"Quorum reached ({result.ConsensusStrength:P0}). You may wish to stop the conversation.";
+                state.StatusEvents.Add(new StatusEvent(DateTimeOffset.UtcNow, notice));
+                active.StatusEvents.Add(new PersistedStatusEvent(DateTimeOffset.UtcNow, notice));
+            }
+
+            Conversations.NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            var errTs = DateTimeOffset.UtcNow;
+            state.StatusEvents.Add(new StatusEvent(errTs, $"Vote failed: {ex.Message}"));
+            active.StatusEvents.Add(new PersistedStatusEvent(errTs, $"Vote failed: {ex.Message}"));
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private enum VoteDialogType { Consensus, FreeForm, Direction }
+
+    private bool _voteDialogVisible;
+    private VoteDialogType _voteType = VoteDialogType.Consensus;
+    private string _voteQuestion = "Have we reached consensus?";
+    private string _voteDirectionOptions = "";
+    private bool _voteRunning;
+    private string? _voteError;
+
+    private void OpenVoteDialog()
+    {
+        if (Active is null || Active.Participants.Count < 2) return;
+        ActiveState.VotePending = true;
+        _voteType = VoteDialogType.Consensus;
+        _voteQuestion = "Have we reached consensus?";
+        _voteDirectionOptions = "";
+        _voteError = null;
+        _voteDialogVisible = true;
+    }
+
+    private void CancelVoteDialog()
+    {
+        _voteDialogVisible = false;
+        _voteError = null;
+        if (Active is not null)
+            ActiveState.VotePending = false;
+    }
+
+    private void OnVoteTypeChanged(VoteDialogType type)
+    {
+        _voteType = type;
+        _voteQuestion = type switch
+        {
+            VoteDialogType.Consensus => "Have we reached consensus?",
+            VoteDialogType.FreeForm => "What is our conclusion?",
+            VoteDialogType.Direction => "What direction should we take next?",
+            _ => _voteQuestion
+        };
+    }
+
+    private async Task SubmitVoteAsync()
+    {
+        if (Active is null) return;
+        _voteDialogVisible = false;
+        _voteRunning = true;
+        _voteError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var options = _voteType switch
+            {
+                VoteDialogType.Consensus => new List<string> { "Yes", "No" },
+                VoteDialogType.Direction => _voteDirectionOptions.Split(',')
+                    .Select(o => o.Trim()).Where(o => !string.IsNullOrWhiteSpace(o)).ToList(),
+                _ => new List<string>()
+            };
+            var quorum = _voteType == VoteDialogType.FreeForm ? Quorum.Plurality : Quorum.SimpleMajority;
+            var context = Active.Topic ?? "";
+
+            var result = await VotingService.VoteAsync(Active.Participants, _voteQuestion, context, options, quorum);
+
+            var voteText = $"[VOTE] Question: {_voteQuestion}\nDecision: {result.Consensus} ({result.ConsensusStrength:P0} agreement)\nSummary: {result.NarrativeSummary}";
+            var round = ActiveState.Messages.Count > 0 ? ActiveState.Messages.Max(m => m.Round) : 1;
+
+            var msg = new ConversationUiMessage { ParticipantId = "vote", Text = voteText, Round = round };
+            ActiveState.Messages.Add(msg);
+            Active.Messages.Add(new PersistedMessage("vote", voteText, round, false));
+            _pendingUserTurns.Add(new SharedTurn { ModelId = "vote", ModelName = "Vote Result", Text = voteText, Round = round });
+
+            Conversations.NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            _voteError = ex.Message;
+            _voteDialogVisible = true;
+        }
+        finally
+        {
+            _voteRunning = false;
+            if (Active is not null)
+                ActiveState.VotePending = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     // ── Max tokens ──
 
@@ -1055,6 +1261,7 @@
         {
             var name = msg.ParticipantId == "user" ? "You"
                      : msg.ParticipantId == "system" ? "System"
+                     : msg.ParticipantId == "vote" ? "Vote Result"
                      : (Active.Participants.FirstOrDefault(p => p.ParticipantId == msg.ParticipantId)?.DisplayName ?? msg.ParticipantId);
             sb.AppendLine($"**{name}** (Round {msg.Round}):");
             sb.AppendLine(msg.Text);
