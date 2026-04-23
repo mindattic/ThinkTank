@@ -1,7 +1,6 @@
 <Solution>
   <Project Path="LLMThinkTank.Core\LLMThinkTank.Core.csproj" />
   <Project Path="LLMThinkTank.Shared\LLMThinkTank.Shared.csproj" />
-  <Project Path="LLMThinkTank.MAUI\LLMThinkTank.MAUI.csproj" />
   <Project Path="LLMThinkTank.Blazor\LLMThinkTank.Blazor.csproj" />
   <Project Path="LLMThinkTank.UnitTests\LLMThinkTank.UnitTests.csproj" />
 </Solution>
