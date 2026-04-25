@@ -1,6 +1,6 @@
 @page "/thinktank"
 @using Microsoft.AspNetCore.Components.Web
-@using MindAttic.LLMVoting
+@using MindAttic.Legion
 @inject LlmThinkTankService ThinkTankService
 @inject VotingService VotingService
 @inject SettingsService Settings
@@ -239,6 +239,12 @@
                     <div class="chat-column">
                         <div class="chat-header">
                             <div class="topic-title">@Active.Topic</div>
+                            <label class="claude-fallback-toggle" title="Route every participant through the Anthropic API while keeping their unique persona. Use when other providers are down.">
+                                <input type="checkbox"
+                                       checked="@Settings.ClaudeFallbackMode"
+                                       @onchange="OnClaudeFallbackToggled" />
+                                <span>Claude only</span>
+                            </label>
                             <button class="start-btn" @onclick="ExportTranscript">Export</button>
                             <button class="start-btn" @onclick="OpenVoteDialog"
                                     disabled="@(_voteRunning || ActiveState.VotePending || Active.Participants.Count < 2)">
@@ -1217,6 +1223,12 @@
         if (int.TryParse(e.Value?.ToString(), out var val) && val >= 1 && val <= 999)
             Active.MaxRounds = val;
         Conversations.NotifyChanged();
+    }
+
+    private void OnClaudeFallbackToggled(ChangeEventArgs e)
+    {
+        var enabled = e.Value is bool b ? b : bool.TryParse(e.Value?.ToString(), out var parsed) && parsed;
+        Settings.SetClaudeFallbackMode(enabled);
     }
 
     // ── Mid-conversation participant add ──

@@ -1,4 +1,5 @@
 using LLMThinkTank.Core.Models;
+using MindAttic.Legion;
 
 namespace LLMThinkTank.Core.Services;
 
@@ -62,6 +63,13 @@ public class LlmThinkTankSettingsService
     public int? GlobalMaxRounds { get; private set; } = 10;
 
     /// <summary>
+    /// When <c>true</c>, every non-Claude participant routes through the Anthropic API, with the
+    /// Claude model roleplaying as that participant's persona. Used as a fallback when other
+    /// providers are rate-limited or down. Each participant retains its unique persona prompt.
+    /// </summary>
+    public bool ClaudeFallbackMode { get; private set; }
+
+    /// <summary>
     /// Initializes the settings service by loading from disk or creating default configuration.
     /// </summary>
     public LlmThinkTankSettingsService()
@@ -80,13 +88,26 @@ public class LlmThinkTankSettingsService
 
     /// <summary>
     /// Loads settings from disk if available, otherwise initializes with defaults for all providers.
-    /// After loading, ensures any newly added providers are backfilled into the configuration.
+    /// <para>
+    /// Credential precedence (highest to lowest):
+    /// <list type="number">
+    ///   <item>Shared MindAttic store at <c>%APPDATA%\MindAttic\LLM\providers.json</c></item>
+    ///   <item>Local <c>Settings.json</c> at <c>%LOCALAPPDATA%\MindAttic\LLMThinkTank</c></item>
+    ///   <item>Hardcoded defaults (empty API keys, provider-specific model ids and maxTokens)</item>
+    ///   <item><see cref="ProviderDefaults"/> from appsettings + user secrets (only used by <see cref="ResetProvidersToDefaults"/>)</item>
+    /// </list>
+    /// After loading, any normalizations (e.g., backfilled <c>maxTokens</c>) and any
+    /// this-app providers not yet in the shared store are synced upward so sibling
+    /// MindAttic apps immediately see the same credentials.
+    /// </para>
     /// </summary>
     private void LoadOrInit()
     {
         if (TryLoad())
         {
+            OverlaySharedCredentials();
             EnsureDefaultsIfMissing();
+            SyncLocalToSharedStore();
             EnsurePersonalityFiles();
             return;
         }
@@ -106,8 +127,67 @@ public class LlmThinkTankSettingsService
         Templates.AddRange(CreateDefaultTemplates());
 
         AppearanceTheme = "dark";
+        OverlaySharedCredentials();
+        SyncLocalToSharedStore();
         EnsurePersonalityFiles();
         Save();
+    }
+
+    /// <summary>
+    /// Pushes every in-memory provider auth entry up to the shared MindAttic store,
+    /// via per-key upsert so sibling-app entries already on disk are preserved. Makes
+    /// the shared file a complete superset for every provider this app supports, and
+    /// propagates any normalizations (like <c>maxTokens</c> backfill) so the next
+    /// launch does not have to re-normalize.
+    /// </summary>
+    private void SyncLocalToSharedStore()
+    {
+        try
+        {
+            var shared = MindAtticLlmCredentialsStore.Exists()
+                ? MindAtticLlmCredentialsStore.LoadAll()
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (providerId, cfg) in ProviderAuth)
+            {
+                if (!shared.TryGetValue(providerId, out var existing) || !string.Equals(existing, cfg.Json, StringComparison.Ordinal))
+                    MindAtticLlmCredentialsStore.Save(providerId, cfg.Json);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Overlays the shared MindAttic credentials store on top of the local provider auth.
+    /// The shared store at <c>%APPDATA%\MindAttic\LLM\providers.json</c> is the canonical
+    /// source for API keys/models so every MindAttic app shares the same configuration.
+    /// On first run, if the shared store is missing, the current local credentials are
+    /// migrated up to it so other apps can pick them up.
+    /// </summary>
+    private void OverlaySharedCredentials()
+    {
+        try
+        {
+            if (!MindAtticLlmCredentialsStore.Exists())
+            {
+                // Migrate: seed the shared store from whatever local credentials exist now,
+                // upserting per-key so any sibling-app entries already on disk are preserved.
+                foreach (var (providerId, cfg) in ProviderAuth)
+                    MindAtticLlmCredentialsStore.Save(providerId, cfg.Json);
+                return;
+            }
+
+            // Overlay shared values, but only for providers this app supports. Cross-app
+            // entries (providers another MindAttic app uses but we don't) stay in the file
+            // untouched and never enter our in-memory ProviderAuth.
+            var shared = MindAtticLlmCredentialsStore.LoadAll();
+            foreach (var (providerId, json) in shared)
+            {
+                if (ProviderAuth.ContainsKey(providerId))
+                    ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
+            }
+        }
+        catch { }
     }
 
     /// <summary>
@@ -207,12 +287,15 @@ public class LlmThinkTankSettingsService
             var defaults = CreateDefaultTemplates();
             var changed = false;
 
-            // Remove providers that are no longer supported
+            // Remove default templates pointing at providers no longer supported by this app.
             var supportedProviders = new HashSet<string>(defaults.Select(d => d.ProviderId));
             var removedTemplates = Templates.RemoveAll(t => t.IsDefault && !supportedProviders.Contains(t.ProviderId));
             if (removedTemplates > 0)
                 changed = true;
 
+            // Drop any provider auth entry that isn't supported by this app. Cross-app entries
+            // live only in the shared %APPDATA%\MindAttic\LLM\providers.json store; they are
+            // never carried in local Settings.json or this app's in-memory ProviderAuth.
             foreach (var key in ProviderAuth.Keys.Where(k => !supportedProviders.Contains(k)).ToList())
             {
                 ProviderAuth.Remove(key);
@@ -373,6 +456,7 @@ public class LlmThinkTankSettingsService
             BorderRadius = dto.BorderRadius ?? 10;
             GlobalMaxTokens = dto.GlobalMaxTokens ?? 2048;
             GlobalMaxRounds = dto.GlobalMaxRounds ?? 10;
+            ClaudeFallbackMode = dto.ClaudeFallbackMode ?? false;
             return true;
         }
         catch
@@ -399,7 +483,8 @@ public class LlmThinkTankSettingsService
                 Gutter = Gutter,
                 BorderRadius = BorderRadius,
                 GlobalMaxTokens = GlobalMaxTokens,
-                GlobalMaxRounds = GlobalMaxRounds
+                GlobalMaxRounds = GlobalMaxRounds,
+                ClaudeFallbackMode = ClaudeFallbackMode
             };
 
             var json = System.Text.Json.JsonSerializer.Serialize(dto, new System.Text.Json.JsonSerializerOptions
@@ -420,11 +505,14 @@ public class LlmThinkTankSettingsService
         => ProviderAuth.TryGetValue(providerId, out var cfg) ? cfg.Json : "{}";
 
     /// <summary>
-    /// Updates the authentication JSON for a provider and persists to disk.
+    /// Updates the authentication JSON for a provider and persists it to both the local
+    /// settings file and the shared <c>%APPDATA%\MindAttic\LLM\providers.json</c> store so
+    /// every MindAttic app picks up the change.
     /// </summary>
     public void SetAuthJson(string providerId, string json)
     {
         ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
+        MindAtticLlmCredentialsStore.Save(providerId, json);
         Save();
     }
 
@@ -470,6 +558,16 @@ public class LlmThinkTankSettingsService
         Save();
     }
 
+    /// <summary>
+    /// Toggles Claude fallback mode and persists to disk. When enabled, every non-Claude
+    /// participant routes through the Anthropic API while keeping its unique persona prompt.
+    /// </summary>
+    public void SetClaudeFallbackMode(bool enabled)
+    {
+        ClaudeFallbackMode = enabled;
+        Save();
+    }
+
     /// <summary>Replaces all persisted conversations and writes to disk.</summary>
     public void SetConversations(IEnumerable<PersistedConversation> convos)
     {
@@ -485,6 +583,51 @@ public class LlmThinkTankSettingsService
         var snapshot = templates.ToList();
         Templates.Clear();
         Templates.AddRange(snapshot);
+        Save();
+    }
+
+    /// <summary>
+    /// Opt-in: replace the participant templates with <paramref name="count"/> personas
+    /// drawn from MindAttic.Legion's <see cref="PersonaLibrary"/>. Each persona is paired
+    /// with one of the active providers (round-robin); when more personas are requested
+    /// than there are providers with keys, the remaining slots fall back to the
+    /// supplied <paramref name="fallbackProviderId"/> (default "claude").
+    ///
+    /// Personas are guaranteed unique within a single call (no-replacement sampling)
+    /// so a roundtable never has two identical voices.
+    /// </summary>
+    public void LoadLegionPersonaTemplates(int count, string fallbackProviderId = "claude", Random? rng = null)
+    {
+        if (count <= 0) return;
+
+        // Active providers = those with a non-empty apiKey in our local auth state.
+        var available = ProviderAuth
+            .Where(kv =>
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(kv.Value.Json);
+                    return doc.RootElement.TryGetProperty("apiKey", out var k)
+                        && !string.IsNullOrWhiteSpace(k.GetString());
+                }
+                catch { return false; }
+            })
+            .Select(kv => kv.Key)
+            .ToList();
+
+        var voters = VoterFactory.GenerateUniqueVoters(count, available, fallbackProviderId, rng);
+
+        Templates.Clear();
+        foreach (var v in voters)
+        {
+            Templates.Add(new ParticipantTemplate(
+                TemplateId: ChatConversationsService.NewId(),
+                ProviderId: v.ProviderId,
+                DisplayName: v.Name,
+                PersonalityMarkdown: v.PersonalityMarkdown,
+                AuthOverrideJson: null,
+                IsDefault: false));
+        }
         Save();
     }
 
@@ -544,7 +687,10 @@ public class LlmThinkTankSettingsService
             return;
 
         foreach (var (providerId, cfg) in ProviderDefaults)
+        {
             ProviderAuth[providerId] = cfg;
+            MindAtticLlmCredentialsStore.Save(providerId, cfg.Json);
+        }
 
         Save();
     }
@@ -561,5 +707,6 @@ public class LlmThinkTankSettingsService
         public int? BorderRadius { get; set; }
         public int? GlobalMaxTokens { get; set; }
         public int? GlobalMaxRounds { get; set; }
+        public bool? ClaudeFallbackMode { get; set; }
     }
 }

@@ -12,6 +12,14 @@ public class SettingsServiceTests
     [SetUp]
     public void SetUp()
     {
+        // Wipe the assembly-level sandbox between tests so each starts with a fresh shared store.
+        var sandbox = MindAtticLlmCredentialsStore.Root;
+        if (Directory.Exists(sandbox))
+        {
+            foreach (var f in Directory.EnumerateFiles(sandbox))
+                File.Delete(f);
+        }
+
         sut = new SettingsService();
     }
 
@@ -383,5 +391,100 @@ public class SettingsServiceTests
     {
         sut.SetGlobalMaxRounds(5);
         Assert.That(sut.GlobalMaxRounds, Is.EqualTo(5));
+    }
+
+    // ── ClaudeFallbackMode ──────────────────────────────────────────────
+
+    [Test]
+    public void ClaudeFallbackMode_DefaultsToFalse()
+    {
+        Assert.That(sut.ClaudeFallbackMode, Is.False);
+    }
+
+    [Test]
+    public void SetClaudeFallbackMode_TogglesValue()
+    {
+        sut.SetClaudeFallbackMode(true);
+        Assert.That(sut.ClaudeFallbackMode, Is.True);
+
+        sut.SetClaudeFallbackMode(false);
+        Assert.That(sut.ClaudeFallbackMode, Is.False);
+    }
+
+    // ── Shared credentials store ────────────────────────────────────────
+
+    [Test]
+    public void MindAtticLlmCredentialsStore_DefaultPath_IsUnderRoamingAppData()
+    {
+        // Temporarily clear the test sandbox override so we observe the real default path.
+        var saved = Environment.GetEnvironmentVariable(MindAtticLlmCredentialsStore.RootEnvVar);
+        try
+        {
+            Environment.SetEnvironmentVariable(MindAtticLlmCredentialsStore.RootEnvVar, null);
+
+            var expectedRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "MindAttic", "LLM");
+
+            Assert.That(MindAtticLlmCredentialsStore.Root, Is.EqualTo(expectedRoot));
+            Assert.That(MindAtticLlmCredentialsStore.ProvidersFilePath,
+                Is.EqualTo(Path.Combine(expectedRoot, "providers.json")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MindAtticLlmCredentialsStore.RootEnvVar, saved);
+        }
+    }
+
+    [Test]
+    public void Construction_SyncsEveryKnownProviderToSharedStore()
+    {
+        // After constructing a fresh SettingsService against an empty sandbox, every
+        // provider this app supports should be present in the shared store so sibling
+        // MindAttic apps can see the same credentials.
+        var shared = MindAtticLlmCredentialsStore.LoadAll();
+        var standardProviders = new[] { "openai", "claude", "gemini", "deepseek", "mistral", "xai", "groq", "together", "openrouter", "fireworks", "cohere" };
+
+        foreach (var providerId in standardProviders)
+            Assert.That(shared.ContainsKey(providerId), Is.True, $"{providerId} missing from shared store");
+    }
+
+    [Test]
+    public void SetAuthJson_PropagatesToSharedStore()
+    {
+        var json = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"sk-propagation-test\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}";
+        sut.SetAuthJson("openai", json);
+
+        var fromShared = MindAtticLlmCredentialsStore.Load("openai");
+        Assert.That(fromShared, Is.Not.Null);
+        Assert.That(fromShared, Does.Contain("sk-propagation-test"));
+    }
+
+    [Test]
+    public void Overlay_SharedStoreValuesTakePrecedenceOverLocal()
+    {
+        // Pre-seed shared store with a known apiKey, then spin up a fresh SettingsService
+        // and verify it reads the shared value rather than the default stub.
+        var sharedJson = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"sk-from-shared-store\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}";
+        MindAtticLlmCredentialsStore.Save("openai", sharedJson);
+
+        var fresh = new SettingsService();
+        Assert.That(fresh.GetKeyForProvider("openai", null), Is.EqualTo("sk-from-shared-store"));
+    }
+
+    [Test]
+    public void MindAtticLlmCredentialsStore_EnvVarOverride_IsHonored()
+    {
+        var saved = Environment.GetEnvironmentVariable(MindAtticLlmCredentialsStore.RootEnvVar);
+        var custom = Path.Combine(Path.GetTempPath(), $"override-{Guid.NewGuid():N}");
+        try
+        {
+            Environment.SetEnvironmentVariable(MindAtticLlmCredentialsStore.RootEnvVar, custom);
+            Assert.That(MindAtticLlmCredentialsStore.Root, Is.EqualTo(custom));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MindAtticLlmCredentialsStore.RootEnvVar, saved);
+        }
     }
 }

@@ -1,5 +1,5 @@
 using LLMThinkTank.Core.Models;
-using MindAttic.LLMVoting;
+using MindAttic.Legion;
 
 namespace LLMThinkTank.Core.Services;
 

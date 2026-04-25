@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using LLMThinkTank.Core.Models;
+using MindAttic.Legion;
 
 namespace LLMThinkTank.Core.Services;
 
@@ -37,111 +38,49 @@ public class LlmThinkTankService
     }
 
     /// <summary>
-    /// Registry of all supported LLM providers with their default identities,
-    /// avatars, personality prompts, and API key registration URLs.
+    /// LLMThinkTank-specific decorations for the providers Legion knows about:
+    /// the visual avatar shown in the chat UI and the roundtable personality
+    /// prompt. The list of providers itself, their display names, and the
+    /// "where to get a key" URLs come from <see cref="LlmProviderCatalog"/> so
+    /// adding a new provider only happens in one place (Legion).
     /// </summary>
-    public List<LlmModel> Models { get; } = new()
+    private static readonly Dictionary<string, (string Avatar, string Personality)> RoundtableDecorations = new()
     {
-        // ── OpenAI ──
-        new LlmModel
-        {
-            Id = "openai",
-            Name = "ChatGPT",
-            Avatar = "⬡",
-            ApiKeyUrl = "https://platform.openai.com/api-keys",
-            Personality = "You are ChatGPT, made by OpenAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be conversational and curious. 2-3 sentences max."
-        },
-        // ── Anthropic ──
-        new LlmModel
-        {
-            Id = "claude",
-            Name = "Claude",
-            Avatar = "◈",
-            ApiKeyUrl = "https://console.anthropic.com/settings/keys",
-            Personality = "You are Claude, made by Anthropic. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be thoughtful and honest. 2-3 sentences max."
-        },
-        // ── Google ──
-        new LlmModel
-        {
-            Id = "gemini",
-            Name = "Gemini",
-            Avatar = "✦",
-            ApiKeyUrl = "https://aistudio.google.com/apikey",
-            Personality = "You are Gemini, made by Google. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be analytical and creative. 2-3 sentences max."
-        },
-        // ── DeepSeek ──
-        new LlmModel
-        {
-            Id = "deepseek",
-            Name = "DeepSeek",
-            Avatar = "◉",
-            ApiKeyUrl = "https://platform.deepseek.com/api_keys",
-            Personality = "You are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max."
-        },
-        // ── Mistral AI ──
-        new LlmModel
-        {
-            Id = "mistral",
-            Name = "Mistral",
-            Avatar = "▲",
-            ApiKeyUrl = "https://console.mistral.ai/api-keys",
-            Personality = "You are Mistral, made by Mistral AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be sharp and efficient. 2-3 sentences max."
-        },
-        // ── xAI ──
-        new LlmModel
-        {
-            Id = "xai",
-            Name = "Grok",
-            Avatar = "✕",
-            ApiKeyUrl = "https://console.x.ai/",
-            Personality = "You are Grok, made by xAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be witty and bold. 2-3 sentences max."
-        },
-        // ── Groq ──
-        new LlmModel
-        {
-            Id = "groq",
-            Name = "Groq",
-            Avatar = "⚡",
-            ApiKeyUrl = "https://console.groq.com/keys",
-            Personality = "You are an AI running on Groq's ultra-fast inference engine. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be quick and insightful. 2-3 sentences max."
-        },
-        // ── Together AI ──
-        new LlmModel
-        {
-            Id = "together",
-            Name = "Together",
-            Avatar = "⊕",
-            ApiKeyUrl = "https://api.together.ai/settings/api-keys",
-            Personality = "You are an AI running on Together AI's platform. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be collaborative and thoughtful. 2-3 sentences max."
-        },
-        // ── OpenRouter ──
-        new LlmModel
-        {
-            Id = "openrouter",
-            Name = "OpenRouter",
-            Avatar = "⬢",
-            ApiKeyUrl = "https://openrouter.ai/settings/keys",
-            Personality = "You are an AI accessed through OpenRouter. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be versatile and engaging. 2-3 sentences max."
-        },
-        // ── Fireworks AI ──
-        new LlmModel
-        {
-            Id = "fireworks",
-            Name = "Fireworks",
-            Avatar = "🔥",
-            ApiKeyUrl = "https://fireworks.ai/account/api-keys",
-            Personality = "You are an AI running on Fireworks AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be fast and perceptive. 2-3 sentences max."
-        },
-        // ── Cohere ──
-        new LlmModel
-        {
-            Id = "cohere",
-            Name = "Cohere",
-            Avatar = "◇",
-            ApiKeyUrl = "https://dashboard.cohere.com/api-keys",
-            Personality = "You are Command, made by Cohere. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be grounded and clear. 2-3 sentences max."
-        },
+        ["openai"]     = ("⬡", "You are ChatGPT, made by OpenAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be conversational and curious. 2-3 sentences max."),
+        ["claude"]     = ("◈", "You are Claude, made by Anthropic. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be thoughtful and honest. 2-3 sentences max."),
+        ["gemini"]     = ("✦", "You are Gemini, made by Google. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be analytical and creative. 2-3 sentences max."),
+        ["deepseek"]   = ("◉", "You are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max."),
+        ["mistral"]    = ("▲", "You are Mistral, made by Mistral AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be sharp and efficient. 2-3 sentences max."),
+        ["xai"]        = ("✕", "You are Grok, made by xAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be witty and bold. 2-3 sentences max."),
+        ["groq"]       = ("⚡", "You are an AI running on Groq's ultra-fast inference engine. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be quick and insightful. 2-3 sentences max."),
+        ["together"]   = ("⊕", "You are an AI running on Together AI's platform. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be collaborative and thoughtful. 2-3 sentences max."),
+        ["openrouter"] = ("⬢", "You are an AI accessed through OpenRouter. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be versatile and engaging. 2-3 sentences max."),
+        ["fireworks"]  = ("🔥", "You are an AI running on Fireworks AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be fast and perceptive. 2-3 sentences max."),
+        ["cohere"]     = ("◇", "You are Command, made by Cohere. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be grounded and clear. 2-3 sentences max."),
     };
+
+    /// <summary>
+    /// Registry of all supported LLM providers, sourced from MindAttic.Legion's
+    /// <see cref="LlmProviderCatalog"/>. Display names and key-acquisition URLs
+    /// come from Legion (canonical source); avatars and the roundtable
+    /// personality prompts stay local since they're product-specific to LLMThinkTank.
+    /// </summary>
+    public List<LlmModel> Models { get; } = LlmProviderCatalog.All
+        .Where(p => RoundtableDecorations.ContainsKey(p.Id))
+        .Select(p =>
+        {
+            var (avatar, personality) = RoundtableDecorations[p.Id];
+            return new LlmModel
+            {
+                Id          = p.Id,
+                Name        = p.DisplayName,
+                Avatar      = avatar,
+                ApiKeyUrl   = p.KeysUrl,
+                Personality = personality,
+            };
+        })
+        .ToList();
+
 
     // ── Main dispatch ────────────────────────────────────────────────────────
 
@@ -171,6 +110,16 @@ public class LlmThinkTankService
     public Task<string> CallProvider(string providerId, string personalityMarkdown, string? authOverrideJson, string topic, List<SharedTurn> history, int? maxTokensOverride = null)
     {
         this.maxTokensOverride = maxTokensOverride;
+
+        // Claude fallback: when other providers crap out, route everyone through the
+        // Anthropic API and have Claude roleplay each participant's unique persona.
+        // Skip the provider's per-template auth override (it points at a non-Claude key).
+        if (settings.ClaudeFallbackMode && providerId != "claude")
+        {
+            var roleplayPrompt = WrapPersonaForClaudeFallback(providerId, personalityMarkdown);
+            return CallClaude(providerId, roleplayPrompt, authOverrideJson: null, topic, history);
+        }
+
         return providerId switch
         {
             "openai"     => CallOpenAI(providerId, personalityMarkdown, authOverrideJson, topic, history),
@@ -186,6 +135,37 @@ public class LlmThinkTankService
             "cohere"     => CallCohere(providerId, personalityMarkdown, authOverrideJson, topic, history),
             _            => throw new ArgumentException($"Unknown provider: {providerId}")
         };
+    }
+
+    /// <summary>
+    /// Wraps a participant's existing persona prompt with explicit roleplay instructions so
+    /// Claude voices each participant as a clearly distinct character when fallback mode is on.
+    /// The wrapper is anchored to the original provider id (so different providers feel different
+    /// even if their persona text is similar) and forbids breaking character.
+    /// </summary>
+    public static string WrapPersonaForClaudeFallback(string originalProviderId, string personalityMarkdown)
+    {
+        var providerLabel = originalProviderId switch
+        {
+            "openai"     => "ChatGPT (OpenAI)",
+            "gemini"     => "Gemini (Google)",
+            "deepseek"   => "DeepSeek",
+            "mistral"    => "Mistral",
+            "xai"        => "Grok (xAI)",
+            "groq"       => "an AI on Groq's inference engine",
+            "together"   => "an AI on Together AI",
+            "openrouter" => "an AI accessed via OpenRouter",
+            "fireworks"  => "an AI on Fireworks AI",
+            "cohere"     => "Command (Cohere)",
+            _            => originalProviderId
+        };
+
+        return
+            $"You are roleplaying as {providerLabel} for an AI roundtable. Stay fully in character for the entire conversation.\n" +
+            "Adopt a distinct voice, vocabulary, sentence rhythm, and intellectual reflexes that match the persona below. " +
+            "Do not mention Anthropic or that you are Claude. Do not break character. Do not preface responses with your name.\n\n" +
+            "── Persona ──\n" +
+            personalityMarkdown;
     }
 
     private int? maxTokensOverride;

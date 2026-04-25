@@ -41,6 +41,26 @@
                     <input type="number" min="1" max="999" step="1"
                            value="@(ThinkTankSettings.GlobalMaxRounds ?? 10)"
                            @onchange="OnGlobalMaxRoundsChanged" />
+
+                    <label style="margin-top:1.25rem; display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                        <input type="checkbox"
+                               checked="@ThinkTankSettings.ClaudeFallbackMode"
+                               @onchange="OnClaudeFallbackToggled" />
+                        Claude fallback mode
+                    </label>
+                    <p class="options-hint" style="margin-top:0;">
+                        When other providers are rate-limited or down, route every participant through the Anthropic API.
+                        Each persona stays unique — Claude roleplays as ChatGPT, Gemini, Grok, etc. using each participant's
+                        personality prompt. Only the Claude API key is used.
+                    </p>
+
+                    <label style="margin-top:1.25rem;">Shared credentials file</label>
+                    <p class="options-hint" style="margin-top:0;">
+                        API keys live at <code>@SharedCredentialsPath</code>
+                    </p>
+                    <p class="options-hint" style="margin-top:-0.25rem;">
+                        Every MindAttic application reads from and writes to this file, so configuring a key here makes it available across all of them.
+                    </p>
                 </div>
             }
             else if (_activeSection == SettingsSection.Appearance)
@@ -486,6 +506,14 @@
         if (int.TryParse(e.Value?.ToString(), out var val) && val >= 1 && val <= 999)
             ThinkTankSettings.SetGlobalMaxRounds(val);
     }
+
+    private void OnClaudeFallbackToggled(ChangeEventArgs e)
+    {
+        var enabled = e.Value is bool b ? b : bool.TryParse(e.Value?.ToString(), out var parsed) && parsed;
+        ThinkTankSettings.SetClaudeFallbackMode(enabled);
+    }
+
+    private string SharedCredentialsPath => MindAtticLlmCredentialsStore.ProvidersFilePath;
 
     private void ToggleAddDropdown()
     {

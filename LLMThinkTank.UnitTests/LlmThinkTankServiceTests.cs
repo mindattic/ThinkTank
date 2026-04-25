@@ -15,6 +15,13 @@ public class LlmThinkTankServiceTests
     [SetUp]
     public void SetUp()
     {
+        var sandbox = MindAtticLlmCredentialsStore.Root;
+        if (Directory.Exists(sandbox))
+        {
+            foreach (var f in Directory.EnumerateFiles(sandbox))
+                File.Delete(f);
+        }
+
         settings = new SettingsService();
         sut = new LlmThinkTankService(new HttpClient(), settings);
     }
@@ -70,6 +77,33 @@ public class LlmThinkTankServiceTests
     {
         Assert.ThrowsAsync<ArgumentException>(async () =>
             await sut.CallProvider("unknown_provider", "personality", null, "topic", new List<SharedTurn>()));
+    }
+
+    // ── Claude fallback wrapping ────────────────────────────────────────
+
+    [TestCase("openai",   "ChatGPT (OpenAI)")]
+    [TestCase("gemini",   "Gemini (Google)")]
+    [TestCase("xai",      "Grok (xAI)")]
+    [TestCase("cohere",   "Command (Cohere)")]
+    [TestCase("deepseek", "DeepSeek")]
+    [TestCase("mistral",  "Mistral")]
+    public void WrapPersonaForClaudeFallback_AnchorsPersonaToOriginalProvider(string providerId, string expectedLabel)
+    {
+        var wrapped = LlmThinkTankService.WrapPersonaForClaudeFallback(providerId, "You are friendly.");
+
+        Assert.That(wrapped, Does.Contain(expectedLabel));
+        Assert.That(wrapped, Does.Contain("You are friendly."));
+        Assert.That(wrapped, Does.Contain("Do not mention Anthropic"));
+        Assert.That(wrapped, Does.Contain("Do not break character"));
+    }
+
+    [Test]
+    public void WrapPersonaForClaudeFallback_DistinctProviders_ProduceDistinctWrappers()
+    {
+        var openai = LlmThinkTankService.WrapPersonaForClaudeFallback("openai", "shared persona");
+        var gemini = LlmThinkTankService.WrapPersonaForClaudeFallback("gemini", "shared persona");
+
+        Assert.That(openai, Is.Not.EqualTo(gemini));
     }
 
     // ── SanitizeModelOutput (private static, tested via reflection) ─────

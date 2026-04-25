@@ -1,7 +1,7 @@
 using LLMThinkTank.Core.Models;
 using LLMThinkTank.Core.Services;
 using LLMThinkTank.Blazor.Components;
-using MindAttic.LLMVoting;
+using MindAttic.Legion;
 
 var builder = WebApplication.CreateBuilder(args);
 

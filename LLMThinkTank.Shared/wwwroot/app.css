@@ -317,6 +317,22 @@ main {
     padding-bottom: 0.5rem;
 }
 
+.claude-fallback-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--text-muted, var(--text));
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.claude-fallback-toggle input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
 .chat-bottom-bar {
     position: sticky;
     bottom: 0;
