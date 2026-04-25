@@ -8,37 +8,45 @@
 @inject IJSRuntime JS
 @implements IDisposable
 
-<PageTitle>LLM Think Tank</PageTitle>
+<PageTitle>Think Tank</PageTitle>
 
 <div class="thinktank-container">
 
-    <div class="chat-tabs">
+    <div class="chat-tabs" role="tablist" aria-label="Conversations">
         @foreach (var c in Conversations.Conversations)
         {
-            <button class="chat-tab @(Conversations.ActiveConversation?.ChatId == c.ChatId ? "active" : "")"
+            var isActive = Conversations.ActiveConversation?.ChatId == c.ChatId;
+            <button class="chat-tab @(isActive ? "active" : "")"
+                    role="tab"
+                    aria-selected="@(isActive ? "true" : "false")"
+                    tabindex="@(isActive ? "0" : "-1")"
+                    aria-label="@($"Conversation {c.Title}{(_states.TryGetValue(c.ChatId, out var tabSt) && tabSt.Running ? ", running" : "")}")"
                     @onclick="(() => Conversations.SetActive(c.ChatId))"
                     @oncontextmenu="((e) => OpenTabContextMenu(e, c.ChatId))" @oncontextmenu:preventDefault>
                 <span class="chat-tab-title">@c.Title</span>
                 @if (_states.TryGetValue(c.ChatId, out var tabState) && tabState.Running)
                 {
-                    <span class="chat-tab-typing"><span class="dot dot1">.</span><span class="dot dot2">.</span><span class="dot dot3">.</span></span>
+                    <span class="chat-tab-typing" aria-label="Running" role="status"><span class="dot dot1" aria-hidden="true">.</span><span class="dot dot2" aria-hidden="true">.</span><span class="dot dot3" aria-hidden="true">.</span></span>
                 }
                 else
                 {
-                    <span class="chat-tab-id">@c.ChatId[..Math.Min(6, c.ChatId.Length)]</span>
+                    <span class="chat-tab-id" aria-hidden="true">@c.ChatId[..Math.Min(6, c.ChatId.Length)]</span>
                 }
-                <span class="chat-tab-close" title="Close" @onclick:stopPropagation @onclick="(() => CloseTab(c.ChatId))">×</span>
+                <span class="chat-tab-close" role="button" tabindex="0" aria-label="@($"Close conversation {c.Title}")"
+                      @onclick:stopPropagation @onclick="(() => CloseTab(c.ChatId))"
+                      @onkeydown="(e => OnCloseTabKeyDown(e, c.ChatId))" @onkeydown:stopPropagation>×</span>
             </button>
         }
-        <button class="chat-tab add" @onclick="NewTab">+ New</button>
+        <button class="chat-tab add" @onclick="NewTab" aria-label="New conversation">+ New</button>
     </div>
 
     @if (_contextMenuVisible)
     {
         <div class="context-menu-overlay" @onclick="CloseContextMenu">
-            <div class="context-menu" style="left:@(_contextMenuX)px; top:@(_contextMenuY)px;" @onclick:stopPropagation>
-                <button class="context-menu-item" @onclick="StartRenameTab">Rename</button>
-                <button class="context-menu-item" @onclick="CloseContextMenuTab">Close</button>
+            <div class="context-menu" role="menu" aria-label="Tab actions"
+                 style="left:@(_contextMenuX)px; top:@(_contextMenuY)px;" @onclick:stopPropagation>
+                <button class="context-menu-item" role="menuitem" @onclick="StartRenameTab">Rename</button>
+                <button class="context-menu-item" role="menuitem" @onclick="CloseContextMenuTab">Close</button>
             </div>
         </div>
     }
@@ -46,9 +54,11 @@
     @if (_renameVisible)
     {
         <div class="dialog-overlay" @onclick="CancelRename">
-            <div class="dialog-box" @onclick:stopPropagation>
-                <div class="dialog-title">Rename Tab</div>
-                <input class="rename-input" @bind="_renameText" @bind:event="oninput" @onkeydown="OnRenameKeyDown" />
+            <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="rename-tab-title"
+                 @onclick:stopPropagation>
+                <div id="rename-tab-title" class="dialog-title">Rename Tab</div>
+                <label for="rename-tab-input" class="visually-hidden">Tab name</label>
+                <input id="rename-tab-input" class="rename-input" @bind="_renameText" @bind:event="oninput" @onkeydown="OnRenameKeyDown" />
                 <div class="dialog-actions" style="margin-top:1rem;">
                     <button class="reset-btn" @onclick="CancelRename">Cancel</button>
                     <button class="start-btn" @onclick="ConfirmRename">Save</button>
@@ -60,41 +70,44 @@
     @if (_voteDialogVisible)
     {
         <div class="dialog-overlay" @onclick="CancelVoteDialog">
-            <div class="dialog-box" @onclick:stopPropagation>
-                <div class="dialog-title">Call a Vote</div>
+            <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="vote-dialog-title"
+                 @onclick:stopPropagation>
+                <div id="vote-dialog-title" class="dialog-title">Call a Vote</div>
 
-                <label class="options-label">Vote Type</label>
-                <div style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
-                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                        <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.Consensus)"
-                               @onchange="(() => OnVoteTypeChanged(VoteDialogType.Consensus))" />
-                        Have we reached consensus? (Yes / No)
-                    </label>
-                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                        <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.FreeForm)"
-                               @onchange="(() => OnVoteTypeChanged(VoteDialogType.FreeForm))" />
-                        What is our conclusion? (Free-form)
-                    </label>
-                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                        <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.Direction)"
-                               @onchange="(() => OnVoteTypeChanged(VoteDialogType.Direction))" />
-                        What direction next? (Custom options)
-                    </label>
-                </div>
+                <fieldset style="border:none; padding:0; margin:0;">
+                    <legend class="options-label">Vote Type</legend>
+                    <div role="radiogroup" aria-label="Vote type" style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.75rem;">
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                            <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.Consensus)"
+                                   @onchange="(() => OnVoteTypeChanged(VoteDialogType.Consensus))" />
+                            Have we reached consensus? (Yes / No)
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                            <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.FreeForm)"
+                                   @onchange="(() => OnVoteTypeChanged(VoteDialogType.FreeForm))" />
+                            What is our conclusion? (Free-form)
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                            <input type="radio" name="voteType" checked="@(_voteType == VoteDialogType.Direction)"
+                                   @onchange="(() => OnVoteTypeChanged(VoteDialogType.Direction))" />
+                            What direction next? (Custom options)
+                        </label>
+                    </div>
+                </fieldset>
 
-                <label class="options-label">Question</label>
-                <input class="rename-input" @bind="_voteQuestion" @bind:event="oninput" />
+                <label class="options-label" for="vote-question">Question</label>
+                <input id="vote-question" class="rename-input" @bind="_voteQuestion" @bind:event="oninput" required aria-required="true" />
 
                 @if (_voteType == VoteDialogType.Direction)
                 {
-                    <label class="options-label" style="margin-top:0.5rem;">Options (comma-separated)</label>
-                    <input class="rename-input" @bind="_voteDirectionOptions" @bind:event="oninput"
-                           placeholder="Option A, Option B, Option C" />
+                    <label class="options-label" for="vote-direction-options" style="margin-top:0.5rem;">Options (comma-separated)</label>
+                    <input id="vote-direction-options" class="rename-input" @bind="_voteDirectionOptions" @bind:event="oninput"
+                           placeholder="Option A, Option B, Option C" required aria-required="true" />
                 }
 
                 @if (!string.IsNullOrEmpty(_voteError))
                 {
-                    <div class="error-msg" style="margin-top:0.5rem;">@_voteError</div>
+                    <div class="error-msg" role="alert" style="margin-top:0.5rem;">@_voteError</div>
                 }
 
                 <div class="dialog-actions" style="margin-top:1rem;">
@@ -110,7 +123,7 @@
 
     @if (Active is null)
     {
-        <div class="setup-panel">
+        <div class="setup-panel" role="region" aria-label="Empty state">
             <p>No conversation tabs yet.</p>
             <button class="start-btn" @onclick="NewTab">Create a conversation</button>
         </div>
@@ -119,24 +132,27 @@
     {
         @if (!ActiveState.Running && ActiveState.Messages.Count == 0)
         {
-            <div class="setup-panel">
-                <label>Discussion Topic</label>
-                <textarea value="@Active.Topic" @oninput="OnTopicInput" rows="3" placeholder="e.g. Is consciousness computational?" />
+            <div class="setup-panel" role="region" aria-label="Conversation setup">
+                <label for="setup-topic">Discussion Topic</label>
+                <textarea id="setup-topic" value="@Active.Topic" @oninput="OnTopicInput" rows="3" placeholder="e.g. Is consciousness computational?" aria-required="true"></textarea>
 
                 <div class="random-topic-row">
                     <span style="flex:1"></span>
                     <div class="random-topic-wrap">
-                        <button class="start-btn random-topic-btn" @onclick="ToggleRandomDropdown" disabled="@_generatingTopic">
+                        <button class="start-btn random-topic-btn" @onclick="ToggleRandomDropdown" disabled="@_generatingTopic"
+                                aria-haspopup="menu" aria-expanded="@(_showRandomDropdown ? "true" : "false")"
+                                aria-busy="@(_generatingTopic ? "true" : "false")"
+                                aria-label="Generate a random discussion topic">
                             @(_generatingTopic ? "Generating..." : "Random")
                         </button>
                         @if (_showRandomDropdown)
                         {
                             <div class="context-menu-overlay" @onclick="(() => _showRandomDropdown = false)"></div>
-                            <div class="random-topic-dropdown">
+                            <div class="random-topic-dropdown" role="menu" aria-label="Choose model for random topic">
                                 @foreach (var m in ThinkTankService.Models)
                                 {
-                                    <button class="context-menu-item" @onclick="(() => GenerateRandomTopic(m.Id))">
-                                        <span>@m.Avatar</span> @m.Name
+                                    <button class="context-menu-item" role="menuitem" @onclick="(() => GenerateRandomTopic(m.Id))">
+                                        <span aria-hidden="true">@m.Avatar</span> @m.Name
                                     </button>
                                 }
                             </div>
@@ -144,18 +160,22 @@
                     </div>
                 </div>
 
-                <div class="participants">
-                    <label>Participants</label>
-                    <div class="participant-grid">
+                <div class="participants" role="group" aria-labelledby="participants-heading">
+                    <label id="participants-heading">Participants</label>
+                    <div class="participant-grid" role="list">
                         @foreach (var t in Settings.Templates)
                         {
                             var selected = Active.Participants.Any(p => p.TemplateId == t.TemplateId);
-                            <div class="tooltip-wrap">
-                                <button class="participant-pill @(selected ? "selected" : "")" @onclick="(() => ToggleParticipant(t))">
-                                    <span class="pill-avatar">@GetProviderAvatar(t.ProviderId)</span>
+                            <div class="tooltip-wrap" role="listitem">
+                                <button class="participant-pill @(selected ? "selected" : "")"
+                                        type="button"
+                                        aria-pressed="@(selected ? "true" : "false")"
+                                        aria-label="@($"{t.DisplayName} ({t.ProviderId}){(selected ? ", selected" : "")}")"
+                                        @onclick="(() => ToggleParticipant(t))">
+                                    <span class="pill-avatar" aria-hidden="true">@GetProviderAvatar(t.ProviderId)</span>
                                     <span>@t.DisplayName</span>
                                 </button>
-                                <div class="tooltip-card">
+                                <div class="tooltip-card" role="tooltip">
                                     <div class="tooltip-card-name">@t.DisplayName</div>
                                     <div class="tooltip-card-provider" style="color: var(--@t.ProviderId);">@t.ProviderId</div>
                                     <div class="tooltip-card-personality">@(t.PersonalityMarkdown?.Length > 200 ? t.PersonalityMarkdown[..200] + "..." : t.PersonalityMarkdown)</div>
@@ -171,7 +191,7 @@
 
                 @if (!string.IsNullOrEmpty(ActiveState.Error))
                 {
-                    <div class="error-msg">@ActiveState.Error</div>
+                    <div class="error-msg" role="alert">@ActiveState.Error</div>
                 }
             </div>
         }
@@ -182,123 +202,133 @@
                 <div class="conversation-grid">
                     <div class="member-column">
                         <aside class="member-list" aria-label="Participants">
-                            <div class="member-list-header">Participants (@Active.Participants.Count)</div>
-                            <div class="member-list-items">
+                            <h2 id="participants-list-heading" class="member-list-header">Participants (@Active.Participants.Count)</h2>
+                            <ul class="member-list-items" role="list" aria-labelledby="participants-list-heading">
                                 @foreach (var p in Active.Participants)
                                 {
-                                    <div class="member-item @(ActiveState.CurrentSpeaker == p.ParticipantId ? "active" : "")">
-                                        <span class="member-avatar">@GetProviderAvatar(p.ProviderId)</span>
+                                    var isSpeaking = ActiveState.CurrentSpeaker == p.ParticipantId;
+                                    <li class="member-item @(isSpeaking ? "active" : "")" aria-current="@(isSpeaking ? "true" : null)">
+                                        <span class="member-avatar" aria-hidden="true">@GetProviderAvatar(p.ProviderId)</span>
                                         <span class="member-name">@p.DisplayName</span>
-                                        @if (ActiveState.CurrentSpeaker == p.ParticipantId)
+                                        @if (isSpeaking)
                                         {
-                                            <span class="member-typing" aria-label="Speaking">
-                                                <span class="dot dot1">.</span>
-                                                <span class="dot dot2">.</span>
-                                                <span class="dot dot3">.</span>
+                                            <span class="member-typing" role="status" aria-label="@($"{p.DisplayName} is speaking")">
+                                                <span class="dot dot1" aria-hidden="true">.</span>
+                                                <span class="dot dot2" aria-hidden="true">.</span>
+                                                <span class="dot dot3" aria-hidden="true">.</span>
                                             </span>
                                         }
-                                    </div>
+                                    </li>
                                 }
-                            </div>
+                            </ul>
                             <div class="member-list-add">
-                                <button class="member-add-btn" @onclick="ToggleMidConvoAdd">+ Add</button>
+                                <button class="member-add-btn" @onclick="ToggleMidConvoAdd"
+                                        aria-haspopup="menu" aria-expanded="@(_showMidConvoAdd ? "true" : "false")"
+                                        aria-label="Add a participant">+ Add</button>
                                 @if (_showMidConvoAdd)
                                 {
                                     <div class="context-menu-overlay" @onclick="(() => _showMidConvoAdd = false)"></div>
-                                    <div class="member-add-dropdown">
+                                    <div class="member-add-dropdown" role="menu" aria-label="Available personas">
                                         @foreach (var t in Settings.Templates.Where(t => !Active.Participants.Any(p => p.TemplateId == t.TemplateId)))
                                         {
-                                            <button class="context-menu-item" @onclick="(() => AddParticipantMidConvo(t))">
-                                                <span>@GetProviderAvatar(t.ProviderId)</span> @t.DisplayName
+                                            <button class="context-menu-item" role="menuitem" @onclick="(() => AddParticipantMidConvo(t))">
+                                                <span aria-hidden="true">@GetProviderAvatar(t.ProviderId)</span> @t.DisplayName
                                             </button>
                                         }
                                     </div>
                                 }
                             </div>
                         </aside>
-                        <div class="options-pane">
-                            <div class="member-list-header">Options</div>
+                        <div class="options-pane" role="group" aria-labelledby="options-pane-heading">
+                            <h2 id="options-pane-heading" class="member-list-header">Options</h2>
                             <div class="options-pane-body">
-                                <label class="options-label">Max Tokens</label>
-                                <input type="number" class="options-input" min="64" max="32768" step="64"
+                                <label class="options-label" for="conv-max-tokens">Max Tokens</label>
+                                <input id="conv-max-tokens" type="number" class="options-input" min="64" max="32768" step="64"
                                        value="@(Active.MaxTokens ?? Settings.GlobalMaxTokens ?? 2048)"
+                                       aria-describedby="conv-options-hint"
                                        @onchange="OnMaxTokensChanged" />
-                                <label class="options-label" style="margin-top:0.5rem">Max Rounds</label>
-                                <input type="number" class="options-input" min="1" max="999" step="1"
+                                <label class="options-label" for="conv-max-rounds" style="margin-top:0.5rem">Max Rounds</label>
+                                <input id="conv-max-rounds" type="number" class="options-input" min="1" max="999" step="1"
                                        value="@(Active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10)"
+                                       aria-describedby="conv-options-hint"
                                        @onchange="OnMaxRoundsChanged" />
-                                <div class="options-hint">Global defaults: @(Settings.GlobalMaxTokens ?? 2048) tokens, @(Settings.GlobalMaxRounds ?? 10) rounds</div>
+                                <div id="conv-options-hint" class="options-hint">Global defaults: @(Settings.GlobalMaxTokens ?? 2048) tokens, @(Settings.GlobalMaxRounds ?? 10) rounds</div>
                             </div>
                         </div>
                         @if (!_followConversation)
                         {
-                            <a class="jump-to-bottom" href="#" @onclick:preventDefault @onclick="JumpToBottom">Jump to Bottom</a>
+                            <a class="jump-to-bottom" href="#" @onclick:preventDefault @onclick="JumpToBottom" aria-label="Jump to bottom of conversation">Jump to Bottom</a>
                         }
                     </div>
 
                     <div class="chat-column">
-                        <div class="chat-header">
-                            <div class="topic-title">@Active.Topic</div>
+                        <header class="chat-header">
+                            <h1 class="topic-title">@Active.Topic</h1>
                             <label class="claude-fallback-toggle" title="Route every participant through the Anthropic API while keeping their unique persona. Use when other providers are down.">
                                 <input type="checkbox"
                                        checked="@Settings.ClaudeFallbackMode"
                                        @onchange="OnClaudeFallbackToggled" />
                                 <span>Claude only</span>
                             </label>
-                            <button class="start-btn" @onclick="ExportTranscript">Export</button>
+                            <button class="start-btn" @onclick="ExportTranscript" aria-label="Export transcript">Export</button>
                             <button class="start-btn" @onclick="OpenVoteDialog"
+                                    aria-busy="@(_voteRunning ? "true" : "false")"
                                     disabled="@(_voteRunning || ActiveState.VotePending || Active.Participants.Count < 2)">
                                 @(_voteRunning ? "Voting…" : "Call Vote")
                             </button>
                             @if (ActiveState.Running)
                             {
-                                <button class="start-btn" @onclick="ToggleRun">Pause</button>
+                                <button class="start-btn" @onclick="ToggleRun" aria-label="Pause conversation">Pause</button>
                             }
                             else
                             {
-                                <button class="start-btn" @onclick="ToggleRun">Resume</button>
+                                <button class="start-btn" @onclick="ToggleRun" aria-label="Resume conversation">Resume</button>
                             }
-                        </div>
+                        </header>
 
                         <div class="messages-wrap">
                             @if (_userChatFocused && ActiveState.Running)
                             {
-                                <div class="conversation-paused-overlay">
+                                <div class="conversation-paused-overlay" role="status" aria-live="polite">
                                     <span>Conversation Paused</span>
                                 </div>
                             }
-                            <div class="messages" @ref="_messagesDiv" @onscroll="OnMessagesScrolled">
+                            <div class="messages" role="log" aria-label="Conversation messages" aria-live="polite" aria-relevant="additions"
+                                 @ref="_messagesDiv" @onscroll="OnMessagesScrolled">
                                 @foreach (var msg in ActiveState.Messages)
                                 {
                                     var p = Active.Participants.FirstOrDefault(x => x.ParticipantId == msg.ParticipantId);
-                                    <div class="message-bubble @(p?.ProviderId ?? "") @(msg.IsError ? "error-bubble" : "") @(msg.ParticipantId == "user" ? "user-bubble" : "") @(msg.ParticipantId == "vote" ? "vote-bubble" : "")">
+                                    var speaker = msg.ParticipantId == "user" ? "You" : msg.ParticipantId == "vote" ? "Vote Result" : (p?.DisplayName ?? msg.ParticipantId);
+                                    <article class="message-bubble @(p?.ProviderId ?? "") @(msg.IsError ? "error-bubble" : "") @(msg.ParticipantId == "user" ? "user-bubble" : "") @(msg.ParticipantId == "vote" ? "vote-bubble" : "")"
+                                             aria-label="@($"{speaker}, round {msg.Round}{(msg.IsError ? ", error" : "")}")">
                                         <div class="bubble-header">
-                                            <span class="bubble-avatar">@(msg.ParticipantId == "user" ? "👤" : msg.ParticipantId == "vote" ? "🗳️" : GetProviderAvatar(p?.ProviderId ?? ""))</span>
-                                            <span class="bubble-name">@(msg.ParticipantId == "user" ? "You" : msg.ParticipantId == "vote" ? "Vote Result" : (p?.DisplayName ?? msg.ParticipantId))</span>
+                                            <span class="bubble-avatar" aria-hidden="true">@(msg.ParticipantId == "user" ? "👤" : msg.ParticipantId == "vote" ? "🗳️" : GetProviderAvatar(p?.ProviderId ?? ""))</span>
+                                            <span class="bubble-name">@speaker</span>
                                             <span class="bubble-round">Round @msg.Round</span>
                                         </div>
                                         <div class="bubble-text">@((MarkupString)FormatMessageText(msg.Text))</div>
-                                    </div>
+                                    </article>
                                 }
 
                                 @if (ActiveState.Running && ActiveState.CurrentSpeaker is not null)
                                 {
                                     var p = Active.Participants.FirstOrDefault(x => x.ParticipantId == ActiveState.CurrentSpeaker);
-                                    <div class="typing-indicator @(p?.ProviderId ?? "")">
-                                        <span class="bubble-avatar">@GetProviderAvatar(p?.ProviderId ?? "")</span>
+                                    <div class="typing-indicator @(p?.ProviderId ?? "")" role="status" aria-live="polite" aria-label="@($"{p?.DisplayName ?? "Participant"} is typing")">
+                                        <span class="bubble-avatar" aria-hidden="true">@GetProviderAvatar(p?.ProviderId ?? "")</span>
                                         <span class="bubble-name">@(p?.DisplayName ?? "")</span>
-                                        <span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>
+                                        <span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
                                     </div>
                                 }
                             </div>
                         </div>
 
                         <div class="chat-bottom-bar">
-                            <div class="user-chat">
-                                <input class="user-chat-input" placeholder="Type a message to steer the conversation…" @bind="_userMessage" @bind:event="oninput"
+                            <div class="user-chat" role="form" aria-label="Send a message to steer the conversation">
+                                <label for="user-chat-input" class="visually-hidden">Your message</label>
+                                <input id="user-chat-input" class="user-chat-input" placeholder="Type a message to steer the conversation…" @bind="_userMessage" @bind:event="oninput"
                                        @onfocus="OnUserChatFocus" @onblur="OnUserChatBlur" @onkeydown="OnUserChatKeyDown" />
                                 <button class="user-chat-send" @onclick="SendUserMessage" disabled="@(string.IsNullOrWhiteSpace(_userMessage) || ActiveState.Running == false)">Send</button>
-                                <button class="user-chat-clear" @onclick="ClearUserChat" title="Clear and unpause">✕</button>
+                                <button class="user-chat-clear" @onclick="ClearUserChat" title="Clear and unpause" aria-label="Clear message and unpause"><span aria-hidden="true">✕</span></button>
                             </div>
                         </div>
                     </div>
@@ -306,27 +336,44 @@
 
                 @if (!ActiveState.Running && ActiveState.Messages.Count > 0)
                 {
-                    <div class="done-bar">
+                    <div class="done-bar" role="status" aria-live="polite">
                         <span>Conversation paused — @ActiveState.Messages.Count messages exchanged.</span>
                     </div>
                 }
             </div>
 
-            <div class="status-log @(_statusLogExpanded ? "" : "collapsed")">
-            <div class="status-log-header" @onclick="(() => _statusLogExpanded = !_statusLogExpanded)">
-                <span class="status-log-toggle">@(_statusLogExpanded ? "▾" : "▸") Status log</span>
+            <section class="status-log @(_statusLogExpanded ? "" : "collapsed")" aria-label="Status log">
+            <button class="status-log-header" type="button"
+                    aria-expanded="@(_statusLogExpanded ? "true" : "false")"
+                    aria-controls="status-log-body"
+                    @onclick="(() => _statusLogExpanded = !_statusLogExpanded)">
+                <span class="status-log-toggle"><span aria-hidden="true">@(_statusLogExpanded ? "▾" : "▸")</span> Status log</span>
                 @if (_statusLogExpanded)
                 {
-                    <span class="status-log-tabs" @onclick:stopPropagation>
-                        <button class="status-log-tab @(_activeStatusTab == StatusTab.Perspective ? "active" : "")" @onclick="(() => _activeStatusTab = StatusTab.Perspective)">Perspective</button>
-                        <button class="status-log-tab @(_activeStatusTab == StatusTab.Context ? "active" : "")" @onclick="(() => { _activeStatusTab = StatusTab.Context; _ = RefreshContextFiles(); })">Context</button>
-                        <button class="status-log-tab @(_activeStatusTab == StatusTab.Diagnostics ? "active" : "")" @onclick="(() => _activeStatusTab = StatusTab.Diagnostics)">Diagnostics</button>
+                    <span class="status-log-tabs" role="tablist" aria-label="Status log views"
+                          @onclick:stopPropagation @onkeydown="OnStatusLogTabsKeyDown" @onkeydown:stopPropagation>
+                        <button class="status-log-tab @(_activeStatusTab == StatusTab.Perspective ? "active" : "")"
+                                role="tab" id="status-tab-perspective" aria-controls="status-log-body"
+                                aria-selected="@(_activeStatusTab == StatusTab.Perspective ? "true" : "false")"
+                                tabindex="@(_activeStatusTab == StatusTab.Perspective ? "0" : "-1")"
+                                @onclick="(() => _activeStatusTab = StatusTab.Perspective)" @onclick:stopPropagation>Perspective</button>
+                        <button class="status-log-tab @(_activeStatusTab == StatusTab.Context ? "active" : "")"
+                                role="tab" id="status-tab-context" aria-controls="status-log-body"
+                                aria-selected="@(_activeStatusTab == StatusTab.Context ? "true" : "false")"
+                                tabindex="@(_activeStatusTab == StatusTab.Context ? "0" : "-1")"
+                                @onclick="(() => { _activeStatusTab = StatusTab.Context; _ = RefreshContextFiles(); })" @onclick:stopPropagation>Context</button>
+                        <button class="status-log-tab @(_activeStatusTab == StatusTab.Diagnostics ? "active" : "")"
+                                role="tab" id="status-tab-diagnostics" aria-controls="status-log-body"
+                                aria-selected="@(_activeStatusTab == StatusTab.Diagnostics ? "true" : "false")"
+                                tabindex="@(_activeStatusTab == StatusTab.Diagnostics ? "0" : "-1")"
+                                @onclick="(() => _activeStatusTab = StatusTab.Diagnostics)" @onclick:stopPropagation>Diagnostics</button>
                     </span>
                 }
-            </div>
+            </button>
             @if (_statusLogExpanded)
             {
-            <div class="status-log-items">
+            <div id="status-log-body" class="status-log-items" role="tabpanel"
+                 aria-labelledby="@($"status-tab-{_activeStatusTab.ToString().ToLowerInvariant()}")">
                 @if (_activeStatusTab == StatusTab.Perspective)
                 {
                     @if (ActiveState.StatusEvents.Count == 0)
@@ -335,13 +382,15 @@
                     }
                     else
                     {
-                        @foreach (var e in ActiveState.StatusEvents)
-                        {
-                            <div class="status-log-item">
-                                <span class="status-ts">@e.Timestamp.LocalDateTime.ToString("HH:mm:ss")</span>
-                                <span class="status-text">@e.Text</span>
-                            </div>
-                        }
+                        <ul role="list">
+                            @foreach (var e in ActiveState.StatusEvents)
+                            {
+                                <li class="status-log-item">
+                                    <time class="status-ts" datetime="@e.Timestamp.ToString("o")">@e.Timestamp.LocalDateTime.ToString("HH:mm:ss")</time>
+                                    <span class="status-text">@e.Text</span>
+                                </li>
+                            }
+                        </ul>
                     }
                 }
                 else if (_activeStatusTab == StatusTab.Context)
@@ -356,7 +405,7 @@
                         {
                             <div class="context-file-entry">
                                 <div class="context-file-name">@kv.Key</div>
-                                <pre class="context-file-content">@kv.Value</pre>
+                                <pre class="context-file-content" tabindex="0" aria-label="@($"Contents of {kv.Key}")">@kv.Value</pre>
                             </div>
                         }
                     }
@@ -369,18 +418,20 @@
                     }
                     else
                     {
-                        @foreach (var e in ActiveState.Diagnostics)
-                        {
-                            <div class="status-log-item">
-                                <span class="status-ts">@e.Timestamp.LocalDateTime.ToString("HH:mm:ss")</span>
-                                <span class="status-text">@e.Text</span>
-                            </div>
-                        }
+                        <ul role="list">
+                            @foreach (var e in ActiveState.Diagnostics)
+                            {
+                                <li class="status-log-item">
+                                    <time class="status-ts" datetime="@e.Timestamp.ToString("o")">@e.Timestamp.LocalDateTime.ToString("HH:mm:ss")</time>
+                                    <span class="status-text">@e.Text</span>
+                                </li>
+                            }
+                        </ul>
                     }
                 }
             </div>
             }
-        </div>
+        </section>
     }
     }
 </div>
@@ -390,6 +441,41 @@
     private StatusTab _activeStatusTab = StatusTab.Perspective;
     private bool _statusLogExpanded;
     private Dictionary<string, string> _contextFiles = new();
+
+    private void OnCloseTabKeyDown(KeyboardEventArgs e, string chatId)
+    {
+        if (e.Key == "Enter" || e.Key == " ")
+            CloseTab(chatId);
+    }
+
+    private void OnStatusLogTabsKeyDown(KeyboardEventArgs e)
+    {
+        var tabs = new[] { StatusTab.Perspective, StatusTab.Context, StatusTab.Diagnostics };
+        var idx = Array.IndexOf(tabs, _activeStatusTab);
+        if (idx < 0) return;
+
+        switch (e.Key)
+        {
+            case "ArrowRight":
+            case "ArrowDown":
+                _activeStatusTab = tabs[(idx + 1) % tabs.Length];
+                break;
+            case "ArrowLeft":
+            case "ArrowUp":
+                _activeStatusTab = tabs[(idx - 1 + tabs.Length) % tabs.Length];
+                break;
+            case "Home":
+                _activeStatusTab = tabs[0];
+                break;
+            case "End":
+                _activeStatusTab = tabs[^1];
+                break;
+        }
+
+        if (_activeStatusTab == StatusTab.Context)
+            _ = RefreshContextFiles();
+    }
+
     private ChatConversation? Active => Conversations.ActiveConversation;
     private ConversationUiState ActiveState => GetState(Active);
 
@@ -398,6 +484,7 @@
     private ElementReference _messagesDiv;
     private bool _followConversation = true;
     private int _lastRenderedMessageCount;
+    private bool _pendingScrollToBottom;
     private string _userMessage = "";
     private bool _userChatFocused;
 
@@ -431,6 +518,12 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         await base.OnAfterRenderAsync(firstRender);
+
+        if (_pendingScrollToBottom)
+        {
+            _pendingScrollToBottom = false;
+            await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
+        }
 
         var count = ActiveState.Messages.Count;
         if (count != _lastRenderedMessageCount)
@@ -513,9 +606,9 @@
     {
         await base.OnParametersSetAsync();
 
-        // When switching tabs, snap to bottom
+        // When switching tabs, snap to bottom on next render (JS interop is unavailable during prerender)
         _followConversation = true;
-        await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
+        _pendingScrollToBottom = true;
     }
 
     private async Task OnMessagesScrolled()

@@ -1,9 +1,13 @@
+@using Microsoft.AspNetCore.Components.Web
+
 @if (_visible)
 {
-    <div class="dialog-overlay" @onclick="Cancel">
-        <div class="dialog-box" @onclick:stopPropagation>
-            <div class="dialog-title">@Title</div>
-            <div class="dialog-message">@Message</div>
+    <div class="dialog-overlay" @onclick="Cancel" @onkeydown="OnKeyDown">
+        <div class="dialog-box" role="alertdialog" aria-modal="true"
+             aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message"
+             tabindex="-1" @onclick:stopPropagation>
+            <div id="confirm-dialog-title" class="dialog-title">@Title</div>
+            <div id="confirm-dialog-message" class="dialog-message">@Message</div>
             <div class="dialog-actions">
                 <button class="reset-btn" @onclick="Cancel">Cancel</button>
                 <button class="start-btn danger-btn" @onclick="Confirm">@ConfirmText</button>
@@ -44,5 +48,11 @@
         _visible = false;
         _tcs?.TrySetResult(false);
         StateHasChanged();
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            Cancel();
     }
 }

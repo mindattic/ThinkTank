@@ -6,6 +6,61 @@
     overflow: hidden;
 }
 
+/* Accessibility: visually hide text but keep it available to screen readers */
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* Skip-to-content link for keyboard users */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--surface, #1a1a2e);
+    color: var(--text, #e0e0f0);
+    padding: 0.5rem 1rem;
+    text-decoration: none;
+    border: 1px solid var(--border, #333);
+    border-radius: 0 0 4px 0;
+    z-index: 10000;
+    font-weight: 600;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+    top: 0;
+    outline: 2px solid var(--gemini, #60a5fa);
+    outline-offset: 2px;
+}
+
+/* Visible keyboard-focus fallback. Component-specific :focus rules that set
+   outline:none still work for mouse users; this restores a visible ring
+   when the user is navigating by keyboard. */
+*:focus-visible {
+    outline: 2px solid var(--gemini, #60a5fa);
+    outline-offset: 2px;
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 /* Animated ellipsis (used in Members list typing/speaking indicator) */
 .member-typing {
     display: inline-flex;
@@ -1139,24 +1194,37 @@ html, body {
 
 .start-btn {
     align-self: flex-start;
-    background: linear-gradient(135deg, var(--openai), var(--gemini));
-    border: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
-    color: #fff;
+    color: var(--text);
     height: var(--control-height);
     cursor: pointer;
-    font-size: 1rem;
-    font-weight: 700;
-    padding: 0 2rem;
-    letter-spacing: 0.03em;
-    transition: opacity 0.2s, transform 0.1s;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0 1.25rem;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    user-select: none;
 }
 
-.start-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
-.start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.start-btn:hover:not(:disabled) {
+    border-color: var(--gemini);
+    background: var(--gemini-bg);
+}
+
+.start-btn:focus-visible {
+    outline: 2px solid var(--gemini);
+    outline-offset: 2px;
+}
+
+.start-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 /* â ¬ â ¬  Scoreboard â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬ â ¬  */
 

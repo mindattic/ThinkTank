@@ -2,32 +2,39 @@
 @inject AppearanceService Appearance
 @inject IJSRuntime JS
 
-<div class="settings-form">
-    <label>Theme</label>
+<div class="settings-form" role="group" aria-labelledby="appearance-heading">
+    <h2 id="appearance-heading" class="visually-hidden">Appearance</h2>
 
-    <select class="settings-select" value="@GetThemeValue(Appearance.Mode)" @onchange="OnThemeChanged">
+    <label for="appearance-theme">Theme</label>
+    <select id="appearance-theme" class="settings-select" value="@GetThemeValue(Appearance.Mode)" @onchange="OnThemeChanged">
         @foreach (var t in Themes)
         {
             <option value="@t.Value">@t.Label</option>
         }
     </select>
 
-    <label>Control Height — @(Appearance.ControlHeight)px</label>
-    <input type="range" min="28" max="60" step="2"
+    <label for="appearance-control-height">Control Height — @(Appearance.ControlHeight)px</label>
+    <input id="appearance-control-height" type="range" min="28" max="60" step="2"
            value="@Appearance.ControlHeight"
            @oninput="OnControlHeightChanged"
+           aria-valuemin="28" aria-valuemax="60" aria-valuenow="@Appearance.ControlHeight"
+           aria-valuetext="@(Appearance.ControlHeight) pixels"
            class="settings-range" />
 
-    <label>Gutter — @(Appearance.Gutter)px</label>
-    <input type="range" min="0" max="30" step="2"
+    <label for="appearance-gutter">Gutter — @(Appearance.Gutter)px</label>
+    <input id="appearance-gutter" type="range" min="0" max="30" step="2"
            value="@Appearance.Gutter"
            @oninput="OnGutterChanged"
+           aria-valuemin="0" aria-valuemax="30" aria-valuenow="@Appearance.Gutter"
+           aria-valuetext="@(Appearance.Gutter) pixels"
            class="settings-range" />
 
-    <label>Border Radius — @(Appearance.BorderRadius)px</label>
-    <input type="range" min="0" max="24" step="2"
+    <label for="appearance-border-radius">Border Radius — @(Appearance.BorderRadius)px</label>
+    <input id="appearance-border-radius" type="range" min="0" max="24" step="2"
            value="@Appearance.BorderRadius"
            @oninput="OnBorderRadiusChanged"
+           aria-valuemin="0" aria-valuemax="24" aria-valuenow="@Appearance.BorderRadius"
+           aria-valuetext="@(Appearance.BorderRadius) pixels"
            class="settings-range" />
 </div>
 

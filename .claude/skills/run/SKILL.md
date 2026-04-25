@@ -1,6 +1,6 @@
 ---
 name: run
-description: Build and run the LLM Think Tank Blazor app. No arguments needed.
+description: Build and run the Think Tank Blazor app. No arguments needed.
 ---
 
 When invoked:

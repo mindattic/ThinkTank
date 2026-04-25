@@ -1,5 +1,6 @@
 @page "/settings"
 @namespace ThinkTank.Shared.Components.Pages
+@using Microsoft.AspNetCore.Components.Web
 @inject SettingsService ThinkTankSettings
 @inject ThinkTankService ThinkTank
 @inject ChatLogService Chat
@@ -12,49 +13,59 @@
 <div class="settings-container">
     <div class="settings-grid">
         <div class="settings-panel">
-            <div class="settings-tabs">
-                <button class="settings-tab @(_activeSection == SettingsSection.Models ? "active" : "")" @onclick="SelectProvidersTab">
-                    Providers
+            <h1 class="visually-hidden">Settings</h1>
+            <div class="settings-tabs" role="tablist" aria-label="Settings sections" @onkeydown="OnSettingsTabsKeyDown">
+                <button id="tab-personas" class="settings-tab @(_activeSection == SettingsSection.Providers ? "active" : "")"
+                        role="tab" aria-selected="@(_activeSection == SettingsSection.Providers ? "true" : "false")"
+                        aria-controls="panel-personas" tabindex="@(_activeSection == SettingsSection.Providers ? "0" : "-1")"
+                        @onclick="(() => _activeSection = SettingsSection.Providers)">
+                    Personas
                 </button>
-                <button class="settings-tab @(_activeSection == SettingsSection.Providers ? "active" : "")" @onclick="(() => _activeSection = SettingsSection.Providers)">
-                    Personalities
-                </button>
-                <button class="settings-tab @(_activeSection == SettingsSection.Defaults ? "active" : "")" @onclick="(() => _activeSection = SettingsSection.Defaults)">
+                <button id="tab-defaults" class="settings-tab @(_activeSection == SettingsSection.Defaults ? "active" : "")"
+                        role="tab" aria-selected="@(_activeSection == SettingsSection.Defaults ? "true" : "false")"
+                        aria-controls="panel-defaults" tabindex="@(_activeSection == SettingsSection.Defaults ? "0" : "-1")"
+                        @onclick="(() => _activeSection = SettingsSection.Defaults)">
                     Defaults
                 </button>
-                <button class="settings-tab @(_activeSection == SettingsSection.Appearance ? "active" : "")" @onclick="(() => _activeSection = SettingsSection.Appearance)">
+                <button id="tab-appearance" class="settings-tab @(_activeSection == SettingsSection.Appearance ? "active" : "")"
+                        role="tab" aria-selected="@(_activeSection == SettingsSection.Appearance ? "true" : "false")"
+                        aria-controls="panel-appearance" tabindex="@(_activeSection == SettingsSection.Appearance ? "0" : "-1")"
+                        @onclick="(() => _activeSection = SettingsSection.Appearance)">
                     Appearance
                 </button>
             </div>
 
             @if (_activeSection == SettingsSection.Defaults)
             {
-                <div class="settings-form" style="padding:1rem;">
-                    <label>Global Max Tokens</label>
-                    <p class="options-hint" style="margin-top:0;">Default max tokens per response. Individual conversations can override this.</p>
-                    <input type="number" min="64" max="32768" step="64"
+                <div id="panel-defaults" role="tabpanel" aria-labelledby="tab-defaults" class="settings-form" style="padding:1rem;">
+                    <label for="defaults-max-tokens">Global Max Tokens</label>
+                    <p id="defaults-max-tokens-hint" class="options-hint" style="margin-top:0;">Default max tokens per response. Individual conversations can override this.</p>
+                    <input id="defaults-max-tokens" type="number" min="64" max="32768" step="64"
                            value="@(ThinkTankSettings.GlobalMaxTokens ?? 2048)"
+                           aria-describedby="defaults-max-tokens-hint"
                            @onchange="OnGlobalMaxTokensChanged" />
 
-                    <label style="margin-top:1rem;">Global Max Rounds</label>
-                    <p class="options-hint" style="margin-top:0;">Default max rounds per conversation. Individual conversations can override this.</p>
-                    <input type="number" min="1" max="999" step="1"
+                    <label for="defaults-max-rounds" style="margin-top:1rem;">Global Max Rounds</label>
+                    <p id="defaults-max-rounds-hint" class="options-hint" style="margin-top:0;">Default max rounds per conversation. Individual conversations can override this.</p>
+                    <input id="defaults-max-rounds" type="number" min="1" max="999" step="1"
                            value="@(ThinkTankSettings.GlobalMaxRounds ?? 10)"
+                           aria-describedby="defaults-max-rounds-hint"
                            @onchange="OnGlobalMaxRoundsChanged" />
 
-                    <label style="margin-top:1.25rem; display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                        <input type="checkbox"
+                    <label for="defaults-claude-fallback" style="margin-top:1.25rem; display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                        <input id="defaults-claude-fallback" type="checkbox"
                                checked="@ThinkTankSettings.ClaudeFallbackMode"
+                               aria-describedby="defaults-claude-fallback-hint"
                                @onchange="OnClaudeFallbackToggled" />
                         Claude fallback mode
                     </label>
-                    <p class="options-hint" style="margin-top:0;">
+                    <p id="defaults-claude-fallback-hint" class="options-hint" style="margin-top:0;">
                         When other providers are rate-limited or down, route every participant through the Anthropic API.
                         Each persona stays unique — Claude roleplays as ChatGPT, Gemini, Grok, etc. using each participant's
                         personality prompt. Only the Claude API key is used.
                     </p>
 
-                    <label style="margin-top:1.25rem;">Shared credentials file</label>
+                    <p style="margin-top:1.25rem;"><strong>Shared credentials file</strong></p>
                     <p class="options-hint" style="margin-top:0;">
                         API keys live at <code>@SharedCredentialsPath</code>
                     </p>
@@ -65,110 +76,62 @@
             }
             else if (_activeSection == SettingsSection.Appearance)
             {
-                <SettingsAppearance />
-            }
-            else if (_activeSection == SettingsSection.Models)
-            {
-                <div class="templates-split">
-                    <div class="templates-left">
-                        <div class="templates-left-header">
-                            <span>Providers</span>
-                        </div>
-                        <div class="templates-left-list">
-                            @foreach (var p in _providerOptions)
-                            {
-                                <button class="settings-tab template-row @(p.Id == _activeProviderId ? "active" : "")" @onclick="(() => SelectProvider(p.Id))">
-                                    <span class="settings-tab-avatar">@GetProviderAvatar(p.Id)</span>
-                                    <span class="template-name">@p.Name</span>
-                                    <span class="provider-dot @GetProviderDotClass(p.Id)" title="@GetProviderDotTitle(p.Id)"></span>
-                                </button>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="templates-right settings-form">
-                        <label>API Key</label>
-                        @{ var apiKeyUrl = ThinkTank.Models.FirstOrDefault(m => m.Id == _activeProviderId)?.ApiKeyUrl; }
-                        <div class="api-key-row">
-                            <input type="@(_showApiKey ? "text" : "password")"
-                                   class="api-key-input"
-                                   value="@_currentApiKey"
-                                   @oninput="OnApiKeyChanged"
-                                   placeholder="Enter your API key..." />
-                            <button type="button" class="api-key-toggle" @onclick="(() => _showApiKey = !_showApiKey)" title="@(_showApiKey ? "Hide" : "Show")">
-                                @(_showApiKey ? "🙈" : "👁")
-                            </button>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(apiKeyUrl))
-                        {
-                            <a href="@apiKeyUrl" target="_blank" rel="noopener noreferrer" class="api-key-link">Get API key →</a>
-                        }
-
-                        <label>Known models</label>
-                        <div class="model-chip-row">
-                            @foreach (var m in GetKnownModels(_activeProviderId))
-                            {
-                                <button type="button" class="model-chip" @onclick="(() => SetProviderModel(m))">@m</button>
-                            }
-                        </div>
-
-                        <details class="auth-json-details">
-                            <summary>Advanced (JSON)</summary>
-                            <textarea class="settings-textarea" @bind="ProviderAuthJson" @bind:event="oninput" rows="8" placeholder="Auth config JSON..."></textarea>
-                        </details>
-
-                        <div class="settings-row">
-                            <button class="start-btn" @onclick="SaveProviderAuth">Save</button>
-                            <span style="flex:1"></span>
-                            <button class="reset-btn" @onclick="RequestResetProviders" disabled="@(!_hasProviderDefaults)">Reset to Defaults</button>
-                        </div>
-                    </div>
+                <div id="panel-appearance" role="tabpanel" aria-labelledby="tab-appearance">
+                    <SettingsAppearance />
                 </div>
             }
             else
             {
+                <div id="panel-personas" role="tabpanel" aria-labelledby="tab-personas">
                 <div class="templates-split">
                     <div class="templates-left">
                         <div class="templates-left-header">
-                            <span>Personalities</span>
+                            <h2 id="personas-heading" style="margin:0; font-size:1rem;">Personas</h2>
                             <div class="add-dropdown">
-                                <button class="settings-tab" @onclick="ToggleAddDropdown">+ Add</button>
+                                <button class="settings-tab" @onclick="ToggleAddDropdown"
+                                        aria-haspopup="menu" aria-expanded="@(_showAddDropdown ? "true" : "false")"
+                                        aria-label="Add a new persona">+ Add</button>
                                 @if (_showAddDropdown)
                                 {
-                                    <div class="add-dropdown-menu">
+                                    <div class="add-dropdown-menu" role="menu" aria-label="Add persona for provider">
                                         @foreach (var p in _providerOptions)
                                         {
-                                            <button class="add-dropdown-item" @onclick="(() => AddTemplateForProvider(p.Id))">
-                                                <span>@GetProviderAvatar(p.Id)</span> @p.Name
+                                            <button class="add-dropdown-item" role="menuitem" @onclick="(() => AddTemplateForProvider(p.Id))">
+                                                <span aria-hidden="true">@GetProviderAvatar(p.Id)</span> @p.Name
                                             </button>
                                         }
                                     </div>
                                 }
                             </div>
                         </div>
-                        <div class="templates-left-list">
+                        <ul class="templates-left-list" role="list" aria-labelledby="personas-heading">
                             @foreach (var t in ThinkTankSettings.Templates)
                             {
-                                <button class="settings-tab template-row @(t.TemplateId == _activeTemplateId ? "active" : "")" @onclick="(() => SelectTemplate(t.TemplateId))">
-                                    <span class="settings-tab-avatar">@GetProviderAvatar(t.ProviderId)</span>
-                                    <span class="template-name">@t.DisplayName</span>
-                                    @if (t.IsDefault)
-                                    {
-                                        <span class="template-default-badge">default</span>
-                                    }
-                                </button>
+                                <li role="listitem">
+                                    <button class="settings-tab template-row @(t.TemplateId == _activeTemplateId ? "active" : "")"
+                                            @onclick="(() => SelectTemplate(t.TemplateId))"
+                                            aria-pressed="@(t.TemplateId == _activeTemplateId ? "true" : "false")"
+                                            aria-label="@($"Select persona {t.DisplayName}{(t.IsDefault ? ", default" : "")}")">
+                                        <span class="settings-tab-avatar" aria-hidden="true">@GetProviderAvatar(t.ProviderId)</span>
+                                        <span class="template-name">@t.DisplayName</span>
+                                        @if (t.IsDefault)
+                                        {
+                                            <span class="template-default-badge">default</span>
+                                        }
+                                    </button>
+                                </li>
                             }
-                        </div>
+                        </ul>
                     </div>
 
-                    <div class="templates-right settings-form">
+                    <div class="templates-right settings-form" aria-live="polite">
                         @if (_activeTemplate is not null)
                         {
-                            <label>Display name</label>
-                            <input value="@_activeTemplate.DisplayName" @oninput="OnTemplateNameChanged" placeholder="e.g. Bob Claude" disabled="@(_activeTemplate.IsDefault)" />
+                            <label for="persona-display-name">Display name</label>
+                            <input id="persona-display-name" value="@_activeTemplate.DisplayName" @oninput="OnTemplateNameChanged" placeholder="e.g. Bob Claude" disabled="@(_activeTemplate.IsDefault)" />
 
-                            <label>Provider</label>
-                            <select value="@_activeTemplate.ProviderId" @onchange="OnTemplateProviderChanged" disabled="@(_activeTemplate.IsDefault)">
+                            <label for="persona-provider">Provider</label>
+                            <select id="persona-provider" value="@_activeTemplate.ProviderId" @onchange="OnTemplateProviderChanged" disabled="@(_activeTemplate.IsDefault)">
                                 @foreach (var p in _providerOptions)
                                 {
                                     <option value="@p.Id">@p.Name</option>
@@ -180,23 +143,25 @@
                             <textarea class="settings-textarea" @oninput="OnTemplateAuthOverrideChanged" rows="6">@(_activeTemplate.AuthOverrideJson ?? "")</textarea>
                             *@
 
-                            <label>Personality (markdown)</label>
-                            <textarea class="settings-textarea" @oninput="OnTemplatePersonalityChanged" rows="16" disabled="@(_activeTemplate.IsDefault)">@_activeTemplate.PersonalityMarkdown</textarea>
+                            <label for="persona-markdown">Persona (markdown)</label>
+                            <textarea id="persona-markdown" class="settings-textarea" @oninput="OnTemplatePersonalityChanged" rows="16" disabled="@(_activeTemplate.IsDefault)" aria-describedby="persona-markdown-hint">@_activeTemplate.PersonalityMarkdown</textarea>
+                            <p id="persona-markdown-hint" class="visually-hidden">Markdown describing the persona's voice, values, and habits.</p>
 
                             <div class="settings-row">
                                 <button class="start-btn" @onclick="SaveActiveTemplate" disabled="@(_activeTemplate is null || _activeTemplate.IsDefault)">Save</button>
-                                <button class="start-btn" @onclick="TestTemplate" disabled="@_testing">Test connection</button>
+                                <button class="start-btn" @onclick="TestTemplate" disabled="@_testing" aria-busy="@(_testing ? "true" : "false")">@(_testing ? "Testing…" : "Test connection")</button>
                                 <button class="reset-btn" @onclick="RequestRemoveTemplate" disabled="@(_activeTemplate.IsDefault)">Remove</button>
                                 <span style="flex:1"></span>
-                                <button class="start-btn" @onclick="GeneratePersonality" disabled="@(_generating || _activeTemplate.IsDefault)">@(_generating ? "Generating…" : "Generate")</button>
+                                <button class="start-btn" @onclick="GeneratePersonality" disabled="@(_generating || _activeTemplate.IsDefault)" aria-busy="@(_generating ? "true" : "false")">@(_generating ? "Generating…" : "Generate")</button>
                             </div>
 
                             @if (!string.IsNullOrWhiteSpace(_lastError))
                             {
-                                <div class="error-msg">@_lastError</div>
+                                <div class="error-msg" role="alert">@_lastError</div>
                             }
                         }
                     </div>
+                </div>
                 </div>
             }
         </div>
@@ -209,34 +174,15 @@
 
 @code {
     private ThinkTank.Shared.Components.Shared.ConfirmationDialog _confirmDialog = default!;
-    private enum SettingsSection { Models, Providers, Defaults, Appearance }
+    private enum SettingsSection { Providers, Defaults, Appearance }
 
     private string? _activeTemplateId;
     private bool _showAddDropdown;
-    private string _activeProviderId = "openai";
-    private string _providerAuthJson = "";
-    private string _currentApiKey = "";
-    private bool _showApiKey;
-    private string ProviderAuthJson
-    {
-        get => _providerAuthJson;
-        set
-        {
-            _providerAuthJson = value ?? "";
-            DebouncePersistProviderAuth(_activeProviderId, _providerAuthJson);
-            DebounceAuthConnectivityCheck(_activeProviderId, _providerAuthJson);
-        }
-    }
     private SettingsSection _activeSection = SettingsSection.Providers;
     private bool _testing;
     private string? _lastError;
     private bool _generating;
     private CancellationTokenSource? _templatePersistDebounceCts;
-
-    private readonly Dictionary<string, ProviderStatus> _providerStatus = new();
-    private CancellationTokenSource? _authDebounceCts;
-    private CancellationTokenSource? _persistDebounceCts;
-    private PeriodicTimer? _providerPollTimer;
 
     private ParticipantTemplate? _activeTemplate => _activeTemplateId is null
         ? null
@@ -257,111 +203,38 @@
         ("cohere", "Cohere")
     };
 
-    private static readonly Dictionary<string, string[]> KnownModels = new()
-    {
-        ["openai"] = ["gpt-4.1-mini", "gpt-4.1", "gpt-4.1-nano", "gpt-4o", "gpt-4o-mini"],
-        ["claude"] = ["claude-sonnet-4-6", "claude-sonnet-4", "claude-haiku-4-5"],
-        ["gemini"] = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"],
-        ["deepseek"] = ["deepseek-chat", "deepseek-reasoner"],
-        ["mistral"] = ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "codestral-latest"],
-        ["xai"] = ["grok-3-latest", "grok-3-mini-latest"],
-        ["groq"] = ["llama-3.3-70b-versatile", "llama-4-scout-17b-16e-instruct", "llama-4-maverick-17b-128e-instruct", "gemma2-9b-it", "mixtral-8x7b-32768"],
-        ["together"] = ["meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", "meta-llama/Llama-4-Scout-17B-16E-Instruct", "meta-llama/Llama-4-Maverick-17B-128E-Instruct", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
-        ["openrouter"] = ["openai/gpt-4.1-mini", "anthropic/claude-sonnet-4", "google/gemini-2.5-flash", "meta-llama/llama-4-scout"],
-        ["fireworks"] = ["accounts/fireworks/models/llama-v3p3-70b-instruct", "accounts/fireworks/models/mixtral-8x7b-instruct"],
-        ["cohere"] = ["command-r-plus", "command-r", "command-light"]
-    };
-
-    private bool _hasProviderDefaults => ThinkTankSettings.ProviderDefaults.Count > 0;
-
     protected override void OnInitialized()
     {
         Chat.Changed += OnChatChanged;
-
         _activeTemplateId ??= ThinkTankSettings.Templates.FirstOrDefault()?.TemplateId;
-        if (string.IsNullOrWhiteSpace(_activeProviderId))
-            _activeProviderId = "openai";
-
-        _providerAuthJson = ThinkTankSettings.GetAuthJson(_activeProviderId);
-        _currentApiKey = ExtractApiKey(_providerAuthJson);
-
-        foreach (var p in _providerOptions)
-            _providerStatus[p.Id] = new ProviderStatus(ProviderOnlineState.Unknown);
-
-        CheckAllProviders();
-
-        _providerPollTimer = new PeriodicTimer(TimeSpan.FromSeconds(10));
-        _ = ProviderPollLoopAsync();
-    }
-
-    private void SelectProvidersTab()
-    {
-        _activeSection = SettingsSection.Models;
-        CheckAllProviders();
-    }
-
-    private void CheckAllProviders()
-    {
-        foreach (var p in _providerOptions)
-            _ = CheckProviderOnlineAsync(p.Id, ThinkTankSettings.GetAuthJson(p.Id));
-    }
-
-    private void DebouncePersistProviderAuth(string providerId, string authJson)
-    {
-        _persistDebounceCts?.Cancel();
-        _persistDebounceCts?.Dispose();
-        _persistDebounceCts = new CancellationTokenSource();
-
-        var token = _persistDebounceCts.Token;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1.25), token);
-                if (token.IsCancellationRequested)
-                    return;
-
-                ThinkTankSettings.SetAuthJson(providerId, authJson ?? "{}");
-            }
-            catch (OperationCanceledException) { }
-        }, token);
-    }
-
-    private IEnumerable<string> GetKnownModels(string providerId)
-        => KnownModels.TryGetValue(providerId, out var models) ? models : Array.Empty<string>();
-
-    private void SetProviderModel(string model)
-    {
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(_providerAuthJson ?? "{}");
-            var type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
-            var apiKey = doc.RootElement.TryGetProperty("apiKey", out var k) ? k.GetString() : null;
-
-            if (string.IsNullOrWhiteSpace(type))
-                type = _activeProviderId is "claude" ? "anthropic" : _activeProviderId is "gemini" ? "google" : "bearer";
-
-            ProviderAuthJson = $"{{\n  \"type\": \"{type}\",\n  \"apiKey\": \"{apiKey ?? ""}\",\n  \"model\": \"{model}\"\n}}";
-        }
-        catch
-        {
-            ProviderAuthJson = $"{{\n  \"type\": \"{_activeProviderId}\",\n  \"apiKey\": \"\",\n  \"model\": \"{model}\"\n}}";
-        }
-    }
-
-    private async Task ProviderPollLoopAsync()
-    {
-        if (_providerPollTimer is null)
-            return;
-
-        while (await _providerPollTimer.WaitForNextTickAsync())
-        {
-            foreach (var p in _providerOptions)
-                _ = CheckProviderOnlineAsync(p.Id, ThinkTankSettings.GetAuthJson(p.Id));
-        }
     }
 
     private void OnChatChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnSettingsTabsKeyDown(KeyboardEventArgs e)
+    {
+        var sections = new[] { SettingsSection.Providers, SettingsSection.Defaults, SettingsSection.Appearance };
+        var idx = Array.IndexOf(sections, _activeSection);
+        if (idx < 0) return;
+
+        switch (e.Key)
+        {
+            case "ArrowRight":
+            case "ArrowDown":
+                _activeSection = sections[(idx + 1) % sections.Length];
+                break;
+            case "ArrowLeft":
+            case "ArrowUp":
+                _activeSection = sections[(idx - 1 + sections.Length) % sections.Length];
+                break;
+            case "Home":
+                _activeSection = sections[0];
+                break;
+            case "End":
+                _activeSection = sections[^1];
+                break;
+        }
+    }
 
     private void SelectTemplate(string templateId)
     {
@@ -372,128 +245,6 @@
 
     private string GetProviderAvatar(string providerId)
         => ThinkTank.Models.FirstOrDefault(m => m.Id == providerId)?.Avatar ?? "?";
-
-    private string GetProviderDotClass(string providerId)
-        => _providerStatus.TryGetValue(providerId, out var s)
-            ? s.State switch
-            {
-                ProviderOnlineState.Online => "online",
-                ProviderOnlineState.Offline => "offline",
-                ProviderOnlineState.Checking => "checking",
-                _ => "unknown"
-            }
-            : "unknown";
-
-    private string GetProviderDotTitle(string providerId)
-        => _providerStatus.TryGetValue(providerId, out var s)
-            ? s.State switch
-            {
-                ProviderOnlineState.Online => "Online",
-                ProviderOnlineState.Offline => string.IsNullOrWhiteSpace(s.LastError) ? "Offline" : $"Offline: {s.LastError}",
-                ProviderOnlineState.Checking => "Checking...",
-                _ => "Unknown"
-            }
-            : "Unknown";
-
-    private static string ExtractApiKey(string authJson)
-    {
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(authJson);
-            if (doc.RootElement.TryGetProperty("apiKey", out var k))
-                return k.GetString() ?? "";
-        }
-        catch { }
-        return "";
-    }
-
-    private void OnApiKeyChanged(ChangeEventArgs e)
-    {
-        _currentApiKey = e.Value?.ToString() ?? "";
-        ThinkTankSettings.SetKey(_activeProviderId, _currentApiKey);
-        _providerAuthJson = ThinkTankSettings.GetAuthJson(_activeProviderId);
-    }
-
-    private void SelectProvider(string providerId)
-    {
-        SaveActiveTemplate();
-        _activeProviderId = providerId;
-        _providerAuthJson = ThinkTankSettings.GetAuthJson(providerId);
-        _currentApiKey = ExtractApiKey(_providerAuthJson);
-        _showApiKey = false;
-        _lastError = null;
-
-        _ = CheckProviderOnlineAsync(_activeProviderId, _providerAuthJson);
-    }
-
-    private void DebounceAuthConnectivityCheck(string providerId, string authJson)
-    {
-        _authDebounceCts?.Cancel();
-        _authDebounceCts?.Dispose();
-        _authDebounceCts = new CancellationTokenSource();
-
-        var token = _authDebounceCts.Token;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), token);
-                if (token.IsCancellationRequested)
-                    return;
-
-                await InvokeAsync(async () => await CheckProviderOnlineAsync(providerId, authJson));
-            }
-            catch (OperationCanceledException) { }
-        }, token);
-    }
-
-    private async Task CheckProviderOnlineAsync(string providerId, string authJson)
-    {
-        if (!_providerStatus.TryGetValue(providerId, out _))
-            _providerStatus[providerId] = new ProviderStatus(ProviderOnlineState.Unknown);
-
-        _providerStatus[providerId] = _providerStatus[providerId] with { State = ProviderOnlineState.Checking, LastChecked = DateTimeOffset.UtcNow, LastError = null };
-        StateHasChanged();
-
-        try
-        {
-            var response = await ThinkTank.CallProvider(
-                providerId,
-                personalityMarkdown: "You are a connectivity test. Reply with 'OK'.",
-                authOverrideJson: authJson,
-                topic: "Connectivity test: reply with OK.",
-                history: new List<SharedTurn>());
-
-            _providerStatus[providerId] = _providerStatus[providerId] with { State = ProviderOnlineState.Online, LastChecked = DateTimeOffset.UtcNow, LastError = null };
-        }
-        catch (Exception ex)
-        {
-            _providerStatus[providerId] = _providerStatus[providerId] with { State = ProviderOnlineState.Offline, LastChecked = DateTimeOffset.UtcNow, LastError = ex.Message };
-        }
-
-        StateHasChanged();
-    }
-
-    private void SaveProviderAuth()
-    {
-        ThinkTankSettings.SetAuthJson(_activeProviderId, _providerAuthJson ?? "{}");
-        _lastError = null;
-        Chat.Add("Models", $"Saved auth config for {_activeProviderId}.");
-    }
-
-    private async Task RequestResetProviders()
-    {
-        var confirmed = await _confirmDialog.ShowAsync(
-            "Reset Providers",
-            "Reset all provider API keys and models to their defaults? This will overwrite your current credentials.",
-            "Reset");
-        if (!confirmed) return;
-
-        ThinkTankSettings.ResetProvidersToDefaults();
-        _providerAuthJson = ThinkTankSettings.GetAuthJson(_activeProviderId);
-        _currentApiKey = ExtractApiKey(_providerAuthJson);
-        Chat.Add("Models", "All providers reset to defaults.");
-    }
 
     private void OnGlobalMaxTokensChanged(ChangeEventArgs e)
     {
@@ -577,7 +328,7 @@
     {
         if (_activeTemplate is null) return;
         var confirmed = await _confirmDialog.ShowAsync(
-            "Remove Personality",
+            "Remove Persona",
             $"Are you sure you want to remove \"{_activeTemplate.DisplayName}\"? This cannot be undone.",
             "Remove");
         if (confirmed) RemoveTemplate();
@@ -700,13 +451,6 @@
     private void OnTemplatePersonalityChanged(ChangeEventArgs e)
         => UpdateActiveTemplate(t => t with { PersonalityMarkdown = e.Value?.ToString() ?? "" });
 
-    private void OnTemplateAuthOverrideChanged(ChangeEventArgs e)
-    {
-        var v = e.Value?.ToString();
-        UpdateActiveTemplate(t => t with { AuthOverrideJson = string.IsNullOrWhiteSpace(v) ? null : v });
-    }
-
-
     private async Task TestTemplate()
     {
         _lastError = null;
@@ -761,21 +505,7 @@
     public void Dispose()
     {
         Chat.Changed -= OnChatChanged;
-
-        _authDebounceCts?.Cancel();
-        _authDebounceCts?.Dispose();
-        _persistDebounceCts?.Cancel();
-        _persistDebounceCts?.Dispose();
         _templatePersistDebounceCts?.Cancel();
         _templatePersistDebounceCts?.Dispose();
-        _providerPollTimer?.Dispose();
-    }
-
-    private enum ProviderOnlineState { Unknown, Checking, Online, Offline }
-
-    private sealed record ProviderStatus(ProviderOnlineState State)
-    {
-        public DateTimeOffset? LastChecked { get; init; }
-        public string? LastError { get; init; }
     }
 }

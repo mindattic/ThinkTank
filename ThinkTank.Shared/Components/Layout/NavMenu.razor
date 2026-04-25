@@ -1,8 +1,30 @@
-﻿<nav class="top-nav">
-    <a class="nav-brand" href="">LLM Think Tank</a>
-    <div class="nav-tabs">
-        <NavLink class="settings-tab nav-tab" href="" Match="NavLinkMatch.All">Home</NavLink>
-        <NavLink class="settings-tab nav-tab" href="thinktank">Conversations</NavLink>
-        <NavLink class="settings-tab nav-tab" href="settings">Settings</NavLink>
+﻿@inject NavigationManager Nav
+@implements IDisposable
+
+<nav class="top-nav" aria-label="Primary">
+    <a class="nav-brand" href="" aria-label="Think Tank home">Think Tank</a>
+    <div class="nav-tabs" role="list">
+        <NavLink class="settings-tab nav-tab" href="" Match="NavLinkMatch.All" aria-current="@AriaCurrent("")">Home</NavLink>
+        <NavLink class="settings-tab nav-tab" href="thinktank" aria-current="@AriaCurrent("thinktank")">Conversations</NavLink>
+        <NavLink class="settings-tab nav-tab" href="settings" aria-current="@AriaCurrent("settings")">Settings</NavLink>
     </div>
 </nav>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    private string? AriaCurrent(string relativePath)
+    {
+        var current = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/');
+        var target = relativePath.Trim('/');
+        return string.Equals(current, target, StringComparison.OrdinalIgnoreCase) ? "page" : null;
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

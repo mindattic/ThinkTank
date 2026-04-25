@@ -1,4 +1,4 @@
-# LLM Think Tank
+# Think Tank
 
 A .NET MAUI + Blazor desktop application that orchestrates multi-participant AI discussions across multiple LLM providers. Create conversation panels where ChatGPT, Claude, Gemini, and DeepSeek debate topics with customizable personalities — and inject your own messages to steer the conversation in real time.
 
@@ -30,7 +30,7 @@ A .NET MAUI + Blazor desktop application that orchestrates multi-participant AI 
 
 ## Overview
 
-LLM Think Tank lets you pit multiple AI models against each other in structured conversations. Each participant has a customizable personality, and the app manages turn-taking, history sharing, and conversation persistence automatically. You can run multiple conversations in parallel using tabs, watch the discussion unfold, and jump in with your own messages at any time.
+Think Tank lets you pit multiple AI models against each other in structured conversations. Each participant has a customizable personality, and the app manages turn-taking, history sharing, and conversation persistence automatically. You can run multiple conversations in parallel using tabs, watch the discussion unfold, and jump in with your own messages at any time.
 
 **Built with:**
 
