@@ -1,4 +1,4 @@
-namespace LLMThinkTank.Core.Models;
+namespace ThinkTank.Core.Models;
 
 /// <summary>
 /// Defines a supported LLM provider with its default identity and personality.

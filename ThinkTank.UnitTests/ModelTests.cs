@@ -1,7 +1,7 @@
 using NUnit.Framework;
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 
-namespace LLMThinkTank.UnitTests;
+namespace ThinkTank.UnitTests;
 
 [TestFixture]
 public class ModelTests

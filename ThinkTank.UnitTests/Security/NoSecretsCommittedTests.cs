@@ -1,6 +1,6 @@
 //using NUnit.Framework;
 
-namespace LLMThinkTank.UnitTests.Security;
+namespace ThinkTank.UnitTests.Security;
 
 public class NoSecretsCommittedTests
 {

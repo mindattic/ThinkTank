@@ -1,4 +1,4 @@
-namespace LLMThinkTank.Core.Models;
+namespace ThinkTank.Core.Models;
 
 /// <summary>
 /// Serializable snapshot of a conversation for JSON persistence.

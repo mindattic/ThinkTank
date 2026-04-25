@@ -1,4 +1,4 @@
-namespace LLMThinkTank.Core.Models;
+namespace ThinkTank.Core.Models;
 
 /// <summary>
 /// Represents a single entry in the application-wide diagnostic log.

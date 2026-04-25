@@ -1,7 +1,7 @@
 @page "/settings"
-@namespace LLMThinkTank.Shared.Components.Pages
+@namespace ThinkTank.Shared.Components.Pages
 @inject SettingsService ThinkTankSettings
-@inject LlmThinkTankService ThinkTank
+@inject ThinkTankService ThinkTank
 @inject ChatLogService Chat
 @inject HumanNameService HumanNames
 @inject NameGeneratorService NameGen
@@ -205,10 +205,10 @@
     </div>
 </div>
 
-<LLMThinkTank.Shared.Components.Shared.ConfirmationDialog @ref="_confirmDialog" />
+<ThinkTank.Shared.Components.Shared.ConfirmationDialog @ref="_confirmDialog" />
 
 @code {
-    private LLMThinkTank.Shared.Components.Shared.ConfirmationDialog _confirmDialog = default!;
+    private ThinkTank.Shared.Components.Shared.ConfirmationDialog _confirmDialog = default!;
     private enum SettingsSection { Models, Providers, Defaults, Appearance }
 
     private string? _activeTemplateId;
@@ -513,7 +513,7 @@
         ThinkTankSettings.SetClaudeFallbackMode(enabled);
     }
 
-    private string SharedCredentialsPath => MindAtticLlmCredentialsStore.ProvidersFilePath;
+    private string SharedCredentialsPath => MindAtticCredentialStore.ProvidersFilePath;
 
     private void ToggleAddDropdown()
     {

@@ -1,7 +1,7 @@
 using NUnit.Framework;
-using LLMThinkTank.Core.Services;
+using ThinkTank.Core.Services;
 
-namespace LLMThinkTank.UnitTests;
+namespace ThinkTank.UnitTests;
 
 [TestFixture]
 public class HumanNameServiceTests

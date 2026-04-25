@@ -1,6 +1,6 @@
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// Controls the application's visual appearance including color theme, control sizing,
@@ -11,7 +11,7 @@ namespace LLMThinkTank.Core.Services;
 /// </summary>
 public class AppearanceService
 {
-    private readonly LlmThinkTankSettingsService settings;
+    private readonly ThinkTankSettingsService settings;
 
     /// <summary>The active color theme applied to all UI components.</summary>
     public AppearanceMode Mode { get; private set; } = AppearanceMode.Dark;
@@ -28,7 +28,7 @@ public class AppearanceService
     /// <summary>
     /// Initializes appearance from persisted settings, applying defaults for any missing values.
     /// </summary>
-    public AppearanceService(LlmThinkTankSettingsService settings)
+    public AppearanceService(ThinkTankSettingsService settings)
     {
         this.settings = settings;
         Mode = ParseMode(this.settings.AppearanceTheme) ?? AppearanceMode.Dark;

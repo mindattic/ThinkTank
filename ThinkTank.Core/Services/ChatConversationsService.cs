@@ -1,18 +1,18 @@
 using System.Collections.ObjectModel;
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// Manages the lifecycle of conversation tabs: creation, activation, closure, and persistence.
 /// Serves as the single source of truth for all open conversations and the currently active tab.
-/// On construction, rehydrates persisted conversations from <see cref="LlmThinkTankSettingsService"/>.
+/// On construction, rehydrates persisted conversations from <see cref="ThinkTankSettingsService"/>.
 /// Every state change is immediately persisted and broadcasts a <see cref="Changed"/> event
 /// for UI components to re-render.
 /// </summary>
 public class ChatConversationsService
 {
-    private readonly LlmThinkTankSettingsService settings;
+    private readonly ThinkTankSettingsService settings;
 
     /// <summary>Observable collection of all open conversation tabs, bound to the tab bar UI.</summary>
     public ObservableCollection<ChatConversation> Conversations { get; } = new();
@@ -27,7 +27,7 @@ public class ChatConversationsService
     /// Initializes the service by rehydrating all persisted conversations from settings.
     /// Sets the last conversation as the active tab.
     /// </summary>
-    public ChatConversationsService(LlmThinkTankSettingsService settings)
+    public ChatConversationsService(ThinkTankSettingsService settings)
     {
         this.settings = settings;
 

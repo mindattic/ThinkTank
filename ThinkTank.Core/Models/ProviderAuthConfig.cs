@@ -1,4 +1,4 @@
-namespace LLMThinkTank.Core.Models;
+namespace ThinkTank.Core.Models;
 
 /// <summary>
 /// Stores the authentication and configuration JSON blob for a single LLM provider.

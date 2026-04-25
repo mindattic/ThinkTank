@@ -20,6 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\LLMThinkTank.Core\LLMThinkTank.Core.csproj" />
+    <ProjectReference Include="..\ThinkTank.Core\ThinkTank.Core.csproj" />
   </ItemGroup>
 </Project>

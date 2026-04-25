@@ -1,10 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 using MindAttic.Legion;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// Core orchestration service that dispatches chat completions to 11+ LLM providers.
@@ -21,24 +21,24 @@ namespace LLMThinkTank.Core.Services;
 /// </list>
 /// </para>
 /// </summary>
-public class LlmThinkTankService
+public class ThinkTankService
 {
     private readonly HttpClient http;
-    private readonly LlmThinkTankSettingsService settings;
+    private readonly ThinkTankSettingsService settings;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="LlmThinkTankService"/> class.
+    /// Initializes a new instance of the <see cref="ThinkTankService"/> class.
     /// </summary>
     /// <param name="http">Shared HTTP client for all outbound API requests.</param>
     /// <param name="settings">Settings service providing API keys, model selections, and token limits.</param>
-    public LlmThinkTankService(HttpClient http, LlmThinkTankSettingsService settings)
+    public ThinkTankService(HttpClient http, ThinkTankSettingsService settings)
     {
         this.http = http;
         this.settings = settings;
     }
 
     /// <summary>
-    /// LLMThinkTank-specific decorations for the providers Legion knows about:
+    /// ThinkTank-specific decorations for the providers Legion knows about:
     /// the visual avatar shown in the chat UI and the roundtable personality
     /// prompt. The list of providers itself, their display names, and the
     /// "where to get a key" URLs come from <see cref="LlmProviderCatalog"/> so
@@ -63,7 +63,7 @@ public class LlmThinkTankService
     /// Registry of all supported LLM providers, sourced from MindAttic.Legion's
     /// <see cref="LlmProviderCatalog"/>. Display names and key-acquisition URLs
     /// come from Legion (canonical source); avatars and the roundtable
-    /// personality prompts stay local since they're product-specific to LLMThinkTank.
+    /// personality prompts stay local since they're product-specific to ThinkTank.
     /// </summary>
     public List<LlmModel> Models { get; } = LlmProviderCatalog.All
         .Where(p => RoundtableDecorations.ContainsKey(p.Id))

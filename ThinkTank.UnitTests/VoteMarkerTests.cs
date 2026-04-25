@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 
-namespace LLMThinkTank.UnitTests;
+namespace ThinkTank.UnitTests;
 
 /// <summary>
 /// Validates the [REQUEST_VOTE: ...] marker that Chat.razor injects into every

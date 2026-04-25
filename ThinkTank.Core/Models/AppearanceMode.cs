@@ -1,4 +1,4 @@
-namespace LLMThinkTank.Core.Models;
+namespace ThinkTank.Core.Models;
 
 /// <summary>
 /// Defines the available UI color themes for the application.

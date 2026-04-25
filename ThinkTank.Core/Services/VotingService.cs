@@ -1,7 +1,7 @@
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 using MindAttic.Legion;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 public class VotingService(LLMVotingService llmVoting)
 {

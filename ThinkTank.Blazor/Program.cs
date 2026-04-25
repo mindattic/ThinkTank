@@ -1,6 +1,6 @@
-using LLMThinkTank.Core.Models;
-using LLMThinkTank.Core.Services;
-using LLMThinkTank.Blazor.Components;
+using ThinkTank.Core.Models;
+using ThinkTank.Core.Services;
+using ThinkTank.Blazor.Components;
 using MindAttic.Legion;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,13 +29,13 @@ builder.Services.AddSingleton(sp =>
 
     return settings;
 });
-builder.Services.AddSingleton<LlmThinkTankSettingsService>(sp => sp.GetRequiredService<SettingsService>());
+builder.Services.AddSingleton<ThinkTankSettingsService>(sp => sp.GetRequiredService<SettingsService>());
 builder.Services.AddSingleton<ChatLogService>();
 builder.Services.AddSingleton<AppearanceService>();
 builder.Services.AddSingleton<ChatConversationsService>();
 builder.Services.AddSingleton<HumanNameService>();
 builder.Services.AddSingleton<NameGeneratorService>();
-builder.Services.AddSingleton<LlmThinkTankService>();
+builder.Services.AddSingleton<ThinkTankService>();
 builder.Services.AddLLMVoting(sp =>
 {
     var settings = sp.GetRequiredService<SettingsService>();
@@ -72,6 +72,6 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(typeof(LLMThinkTank.Shared.Components.Pages.Home).Assembly);
+    .AddAdditionalAssemblies(typeof(ThinkTank.Shared.Components.Pages.Home).Assembly);
 
 app.Run();

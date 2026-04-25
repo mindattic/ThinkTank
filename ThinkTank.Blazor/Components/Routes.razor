@@ -1,8 +1,8 @@
-<Router AppAssembly="typeof(LLMThinkTank.Shared.Components.Pages.Home).Assembly"
+<Router AppAssembly="typeof(ThinkTank.Shared.Components.Pages.Home).Assembly"
         AdditionalAssemblies="new[] { typeof(Routes).Assembly }"
-        NotFoundPage="typeof(LLMThinkTank.Shared.Components.Pages.NotFound)">
+        NotFoundPage="typeof(ThinkTank.Shared.Components.Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(LLMThinkTank.Shared.Components.Layout.MainLayout)" />
+        <RouteView RouteData="routeData" DefaultLayout="typeof(ThinkTank.Shared.Components.Layout.MainLayout)" />
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

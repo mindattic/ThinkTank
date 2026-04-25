@@ -1,7 +1,7 @@
 @page "/thinktank"
 @using Microsoft.AspNetCore.Components.Web
 @using MindAttic.Legion
-@inject LlmThinkTankService ThinkTankService
+@inject ThinkTankService ThinkTankService
 @inject VotingService VotingService
 @inject SettingsService Settings
 @inject ChatConversationsService Conversations
@@ -437,7 +437,7 @@
         {
             _lastRenderedMessageCount = count;
             if (_followConversation)
-                await JS.InvokeVoidAsync("LLMThinkTank.scrollToBottom", _messagesDiv);
+                await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
 
             // Auto-refresh context tab when new messages arrive
             if (_activeStatusTab == StatusTab.Context)
@@ -515,18 +515,18 @@
 
         // When switching tabs, snap to bottom
         _followConversation = true;
-        await JS.InvokeVoidAsync("LLMThinkTank.scrollToBottom", _messagesDiv);
+        await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
     }
 
     private async Task OnMessagesScrolled()
     {
-        _followConversation = await JS.InvokeAsync<bool>("LLMThinkTank.isNearBottom", _messagesDiv, 60);
+        _followConversation = await JS.InvokeAsync<bool>("ThinkTank.isNearBottom", _messagesDiv, 60);
     }
 
     private async Task JumpToBottom()
     {
         _followConversation = true;
-        await JS.InvokeVoidAsync("LLMThinkTank.scrollToBottom", _messagesDiv);
+        await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -864,7 +864,7 @@
     {
         _userMessage = "";
         _userChatFocused = false;
-        await JS.InvokeVoidAsync("LLMThinkTank.blurActive");
+        await JS.InvokeVoidAsync("ThinkTank.blurActive");
         await InvokeAsync(StateHasChanged);
     }
 
@@ -889,7 +889,7 @@
         {
             await SendUserMessage();
             _userChatFocused = false;
-            await JS.InvokeVoidAsync("LLMThinkTank.blurActive");
+            await JS.InvokeVoidAsync("ThinkTank.blurActive");
         }
     }
 
@@ -1281,7 +1281,7 @@
         }
 
         var content = sb.ToString();
-        await JS.InvokeVoidAsync("LLMThinkTank.downloadFile", $"{Active.Title}.md", content);
+        await JS.InvokeVoidAsync("ThinkTank.downloadFile", $"{Active.Title}.md", content);
     }
 
     // ── Markdown-lite formatting ──

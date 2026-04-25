@@ -1,21 +1,22 @@
+using MindAttic.Legion;
 using System.Reflection;
 using System.Text.Json;
 using NUnit.Framework;
-using LLMThinkTank.Core.Models;
-using LLMThinkTank.Core.Services;
+using ThinkTank.Core.Models;
+using ThinkTank.Core.Services;
 
-namespace LLMThinkTank.UnitTests;
+namespace ThinkTank.UnitTests;
 
 [TestFixture]
-public class LlmThinkTankServiceTests
+public class ThinkTankServiceTests
 {
     private SettingsService settings = null!;
-    private LlmThinkTankService sut = null!;
+    private ThinkTankService sut = null!;
 
     [SetUp]
     public void SetUp()
     {
-        var sandbox = MindAtticLlmCredentialsStore.Root;
+        var sandbox = MindAtticCredentialStore.CredentialDirectory;
         if (Directory.Exists(sandbox))
         {
             foreach (var f in Directory.EnumerateFiles(sandbox))
@@ -23,7 +24,7 @@ public class LlmThinkTankServiceTests
         }
 
         settings = new SettingsService();
-        sut = new LlmThinkTankService(new HttpClient(), settings);
+        sut = new ThinkTankService(new HttpClient(), settings);
     }
 
     // ── Models registry ─────────────────────────────────────────────────
@@ -89,7 +90,7 @@ public class LlmThinkTankServiceTests
     [TestCase("mistral",  "Mistral")]
     public void WrapPersonaForClaudeFallback_AnchorsPersonaToOriginalProvider(string providerId, string expectedLabel)
     {
-        var wrapped = LlmThinkTankService.WrapPersonaForClaudeFallback(providerId, "You are friendly.");
+        var wrapped = ThinkTankService.WrapPersonaForClaudeFallback(providerId, "You are friendly.");
 
         Assert.That(wrapped, Does.Contain(expectedLabel));
         Assert.That(wrapped, Does.Contain("You are friendly."));
@@ -100,8 +101,8 @@ public class LlmThinkTankServiceTests
     [Test]
     public void WrapPersonaForClaudeFallback_DistinctProviders_ProduceDistinctWrappers()
     {
-        var openai = LlmThinkTankService.WrapPersonaForClaudeFallback("openai", "shared persona");
-        var gemini = LlmThinkTankService.WrapPersonaForClaudeFallback("gemini", "shared persona");
+        var openai = ThinkTankService.WrapPersonaForClaudeFallback("openai", "shared persona");
+        var gemini = ThinkTankService.WrapPersonaForClaudeFallback("gemini", "shared persona");
 
         Assert.That(openai, Is.Not.EqualTo(gemini));
     }
@@ -110,7 +111,7 @@ public class LlmThinkTankServiceTests
 
     private static string InvokeSanitize(string providerId, string text)
     {
-        var method = typeof(LlmThinkTankService)
+        var method = typeof(ThinkTankService)
             .GetMethod("SanitizeModelOutput", BindingFlags.NonPublic | BindingFlags.Static)!;
         return (string)method.Invoke(null, new object[] { providerId, text })!;
     }
@@ -177,7 +178,7 @@ public class LlmThinkTankServiceTests
 
     private static string InvokeExtractError(string json)
     {
-        var method = typeof(LlmThinkTankService)
+        var method = typeof(ThinkTankService)
             .GetMethod("ExtractError", BindingFlags.NonPublic | BindingFlags.Static)!;
         return (string)method.Invoke(null, new object[] { json })!;
     }
@@ -213,7 +214,7 @@ public class LlmThinkTankServiceTests
 
     private static List<SharedTurn> InvokeTrimHistory(List<SharedTurn> history)
     {
-        var method = typeof(LlmThinkTankService)
+        var method = typeof(ThinkTankService)
             .GetMethod("TrimHistory", BindingFlags.NonPublic | BindingFlags.Static)!;
         return (List<SharedTurn>)method.Invoke(null, new object[] { history })!;
     }
@@ -264,7 +265,7 @@ public class LlmThinkTankServiceTests
 
     private static List<object> InvokeBuildMessages(string providerId, string personality, string topic, List<SharedTurn> history)
     {
-        var method = typeof(LlmThinkTankService)
+        var method = typeof(ThinkTankService)
             .GetMethod("BuildOpenAiStyleMessages", BindingFlags.NonPublic | BindingFlags.Static)!;
         return (List<object>)method.Invoke(null, new object[] { providerId, personality, topic, history })!;
     }
@@ -343,7 +344,7 @@ public class LlmThinkTankServiceTests
 
     private static string InvokeRedact(string providerId, string raw)
     {
-        var method = typeof(LlmThinkTankService)
+        var method = typeof(ThinkTankService)
             .GetMethod("RedactResponseText", BindingFlags.NonPublic | BindingFlags.Static)!;
         return (string)method.Invoke(null, new object[] { providerId, raw })!;
     }

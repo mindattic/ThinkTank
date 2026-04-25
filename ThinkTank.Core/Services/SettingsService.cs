@@ -1,20 +1,20 @@
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 using MindAttic.Legion;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// Concrete settings service registered in the DI container for production use.
-/// Inherits all persistence and configuration logic from <see cref="LlmThinkTankSettingsService"/>.
+/// Inherits all persistence and configuration logic from <see cref="ThinkTankSettingsService"/>.
 /// </summary>
-public class SettingsService : LlmThinkTankSettingsService
+public class SettingsService : ThinkTankSettingsService
 {
 }
 
 /// <summary>
 /// Manages all persistent application state: provider authentication credentials, participant
 /// templates, conversation history, and appearance settings. Data is stored as a single
-/// <c>Settings.json</c> file in the user's <c>LocalApplicationData/MindAttic/LLMThinkTank</c> folder.
+/// <c>Settings.json</c> file in the user's <c>LocalApplicationData/MindAttic/ThinkTank</c> folder.
 /// <para>
 /// <b>Initialization:</b> On first launch, seeds default auth configs for all 11 providers and
 /// creates default personality templates. On subsequent launches, loads existing settings and
@@ -25,7 +25,7 @@ public class SettingsService : LlmThinkTankSettingsService
 /// immediately writes the full state to disk, ensuring crash-safe persistence.
 /// </para>
 /// </summary>
-public class LlmThinkTankSettingsService
+public class ThinkTankSettingsService
 {
     /// <summary>Per-provider authentication and model configuration, keyed by provider ID.</summary>
     public Dictionary<string, ProviderAuthConfig> ProviderAuth { get; } = new();
@@ -72,13 +72,39 @@ public class LlmThinkTankSettingsService
     /// <summary>
     /// Initializes the settings service by loading from disk or creating default configuration.
     /// </summary>
-    public LlmThinkTankSettingsService()
+    public ThinkTankSettingsService()
     {
+        MigrateLegacyStorageFolder();
         LoadOrInit();
     }
 
     private static string SettingsRoot
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank");
+
+    private static string LegacySettingsRoot
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "LLMThinkTank");
+
+    /// <summary>
+    /// One-shot rename of the legacy app-data folder from
+    /// <c>%LOCALAPPDATA%\MindAttic\LLMThinkTank</c> to <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c>
+    /// after the app rename. Idempotent: only runs when the new folder is missing
+    /// and the legacy one exists, so existing users keep every persisted
+    /// conversation, template, and personality file. Failures are silent —
+    /// worst case the user starts with a fresh folder, which is exactly what
+    /// would have happened without this migration.
+    /// </summary>
+    private static void MigrateLegacyStorageFolder()
+    {
+        try
+        {
+            var newRoot = SettingsRoot;
+            var oldRoot = LegacySettingsRoot;
+            if (Directory.Exists(newRoot)) return;
+            if (!Directory.Exists(oldRoot)) return;
+            Directory.Move(oldRoot, newRoot);
+        }
+        catch { }
+    }
 
     private static string PersonalitiesRoot
         => Path.Combine(SettingsRoot, "Personalities");
@@ -92,7 +118,7 @@ public class LlmThinkTankSettingsService
     /// Credential precedence (highest to lowest):
     /// <list type="number">
     ///   <item>Shared MindAttic store at <c>%APPDATA%\MindAttic\LLM\providers.json</c></item>
-    ///   <item>Local <c>Settings.json</c> at <c>%LOCALAPPDATA%\MindAttic\LLMThinkTank</c></item>
+    ///   <item>Local <c>Settings.json</c> at <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c></item>
     ///   <item>Hardcoded defaults (empty API keys, provider-specific model ids and maxTokens)</item>
     ///   <item><see cref="ProviderDefaults"/> from appsettings + user secrets (only used by <see cref="ResetProvidersToDefaults"/>)</item>
     /// </list>
@@ -144,14 +170,14 @@ public class LlmThinkTankSettingsService
     {
         try
         {
-            var shared = MindAtticLlmCredentialsStore.Exists()
-                ? MindAtticLlmCredentialsStore.LoadAll()
+            var shared = MindAtticCredentialStore.ProvidersFileExists()
+                ? MindAtticCredentialStore.LoadAllRaw()
                 : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var (providerId, cfg) in ProviderAuth)
             {
                 if (!shared.TryGetValue(providerId, out var existing) || !string.Equals(existing, cfg.Json, StringComparison.Ordinal))
-                    MindAtticLlmCredentialsStore.Save(providerId, cfg.Json);
+                    MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
             }
         }
         catch { }
@@ -168,19 +194,19 @@ public class LlmThinkTankSettingsService
     {
         try
         {
-            if (!MindAtticLlmCredentialsStore.Exists())
+            if (!MindAtticCredentialStore.ProvidersFileExists())
             {
                 // Migrate: seed the shared store from whatever local credentials exist now,
                 // upserting per-key so any sibling-app entries already on disk are preserved.
                 foreach (var (providerId, cfg) in ProviderAuth)
-                    MindAtticLlmCredentialsStore.Save(providerId, cfg.Json);
+                    MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
                 return;
             }
 
             // Overlay shared values, but only for providers this app supports. Cross-app
             // entries (providers another MindAttic app uses but we don't) stay in the file
             // untouched and never enter our in-memory ProviderAuth.
-            var shared = MindAtticLlmCredentialsStore.LoadAll();
+            var shared = MindAtticCredentialStore.LoadAllRaw();
             foreach (var (providerId, json) in shared)
             {
                 if (ProviderAuth.ContainsKey(providerId))
@@ -512,7 +538,7 @@ public class LlmThinkTankSettingsService
     public void SetAuthJson(string providerId, string json)
     {
         ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
-        MindAtticLlmCredentialsStore.Save(providerId, json);
+        MindAtticCredentialStore.SaveRaw(providerId, json);
         Save();
     }
 
@@ -689,7 +715,7 @@ public class LlmThinkTankSettingsService
         foreach (var (providerId, cfg) in ProviderDefaults)
         {
             ProviderAuth[providerId] = cfg;
-            MindAtticLlmCredentialsStore.Save(providerId, cfg.Json);
+            MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
         }
 
         Save();

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// In-memory log of application events and API diagnostics displayed in the Log panel.
@@ -41,7 +41,7 @@ public class ChatLogService
 /// <summary>
 /// Provides file-based persistence for individual conversation data, stored separately
 /// from the main Settings.json. Each conversation gets its own folder under
-/// <c>LocalApplicationData/MindAttic/LLMThinkTank/Conversations/{chatId}/</c> containing:
+/// <c>LocalApplicationData/MindAttic/ThinkTank/Conversations/{chatId}/</c> containing:
 /// <list type="bullet">
 ///   <item><c>chat.json</c> - Array of turn entries with participant IDs, text, round numbers</item>
 ///   <item><c>{modelId}.md</c> - Per-model perspective markdown files for extended context</item>
@@ -51,7 +51,7 @@ public static class ChatStorage
 {
     /// <summary>Returns the folder path for a specific conversation's persistent data.</summary>
     public static string GetChatFolder(string chatId)
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "LLMThinkTank", "Conversations", chatId);
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank", "Conversations", chatId);
 
     /// <summary>Returns the path to a conversation's <c>chat.json</c> turn history file.</summary>
     public static string GetChatJsonPath(string chatId)

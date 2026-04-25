@@ -1,4 +1,4 @@
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// Provides offline random human name generation from a curated pool of 30 gender-neutral

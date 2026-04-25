@@ -1,38 +1,38 @@
-window.LLMThinkTank = window.LLMThinkTank || {};
+window.ThinkTank = window.ThinkTank || {};
 
-window.LLMThinkTank.setTheme = (mode) => {
+window.ThinkTank.setTheme = (mode) => {
     const root = document.documentElement;
     root.setAttribute('data-theme', mode);
 };
 
-window.LLMThinkTank.setControlHeight = (px) => {
+window.ThinkTank.setControlHeight = (px) => {
     document.documentElement.style.setProperty('--control-height', px + 'px');
 };
 
-window.LLMThinkTank.setGutter = (px) => {
+window.ThinkTank.setGutter = (px) => {
     document.documentElement.style.setProperty('--gutter', px + 'px');
 };
 
-window.LLMThinkTank.setBorderRadius = (px) => {
+window.ThinkTank.setBorderRadius = (px) => {
     document.documentElement.style.setProperty('--radius', px + 'px');
 };
 
-window.LLMThinkTank.isNearBottom = (el, thresholdPx) => {
+window.ThinkTank.isNearBottom = (el, thresholdPx) => {
     if (!el) return true;
     const threshold = thresholdPx ?? 60;
     return (el.scrollTop + el.clientHeight) >= (el.scrollHeight - threshold);
 };
 
-window.LLMThinkTank.scrollToBottom = (el) => {
+window.ThinkTank.scrollToBottom = (el) => {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
 };
 
-window.LLMThinkTank.blurActive = () => {
+window.ThinkTank.blurActive = () => {
     if (document.activeElement) document.activeElement.blur();
 };
 
-window.LLMThinkTank.downloadFile = (filename, content) => {
+window.ThinkTank.downloadFile = (filename, content) => {
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

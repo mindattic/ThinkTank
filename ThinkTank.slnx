@@ -1,6 +1,6 @@
 <Solution>
-  <Project Path="LLMThinkTank.Core\LLMThinkTank.Core.csproj" />
-  <Project Path="LLMThinkTank.Shared\LLMThinkTank.Shared.csproj" />
-  <Project Path="LLMThinkTank.Blazor\LLMThinkTank.Blazor.csproj" />
-  <Project Path="LLMThinkTank.UnitTests\LLMThinkTank.UnitTests.csproj" />
+  <Project Path="ThinkTank.Core\ThinkTank.Core.csproj" />
+  <Project Path="ThinkTank.Shared\ThinkTank.Shared.csproj" />
+  <Project Path="ThinkTank.Blazor\ThinkTank.Blazor.csproj" />
+  <Project Path="ThinkTank.UnitTests\ThinkTank.UnitTests.csproj" />
 </Solution>

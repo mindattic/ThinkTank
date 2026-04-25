@@ -1,4 +1,4 @@
-@namespace LLMThinkTank.Shared.Components.Pages
+@namespace ThinkTank.Shared.Components.Pages
 @inject AppearanceService Appearance
 @inject IJSRuntime JS
 
@@ -71,7 +71,7 @@
         if (int.TryParse(e.Value?.ToString(), out var px))
         {
             Appearance.SetControlHeight(px);
-            await JS.InvokeVoidAsync("LLMThinkTank.setControlHeight", px);
+            await JS.InvokeVoidAsync("ThinkTank.setControlHeight", px);
         }
     }
 
@@ -80,7 +80,7 @@
         if (int.TryParse(e.Value?.ToString(), out var px))
         {
             Appearance.SetGutter(px);
-            await JS.InvokeVoidAsync("LLMThinkTank.setGutter", px);
+            await JS.InvokeVoidAsync("ThinkTank.setGutter", px);
         }
     }
 
@@ -89,14 +89,14 @@
         if (int.TryParse(e.Value?.ToString(), out var px))
         {
             Appearance.SetBorderRadius(px);
-            await JS.InvokeVoidAsync("LLMThinkTank.setBorderRadius", px);
+            await JS.InvokeVoidAsync("ThinkTank.setBorderRadius", px);
         }
     }
 
     private async Task Set(AppearanceMode mode)
     {
         Appearance.SetMode(mode);
-        await JS.InvokeVoidAsync("LLMThinkTank.setTheme", GetThemeValue(mode));
+        await JS.InvokeVoidAsync("ThinkTank.setTheme", GetThemeValue(mode));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -104,9 +104,9 @@
         if (!firstRender)
             return;
 
-        await JS.InvokeVoidAsync("LLMThinkTank.setTheme", GetThemeValue(Appearance.Mode));
-        await JS.InvokeVoidAsync("LLMThinkTank.setControlHeight", Appearance.ControlHeight);
-        await JS.InvokeVoidAsync("LLMThinkTank.setGutter", Appearance.Gutter);
-        await JS.InvokeVoidAsync("LLMThinkTank.setBorderRadius", Appearance.BorderRadius);
+        await JS.InvokeVoidAsync("ThinkTank.setTheme", GetThemeValue(Appearance.Mode));
+        await JS.InvokeVoidAsync("ThinkTank.setControlHeight", Appearance.ControlHeight);
+        await JS.InvokeVoidAsync("ThinkTank.setGutter", Appearance.Gutter);
+        await JS.InvokeVoidAsync("ThinkTank.setBorderRadius", Appearance.BorderRadius);
     }
 }

@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace LLMThinkTank.Core.Models;
+namespace ThinkTank.Core.Models;
 
 /// <summary>
 /// A reusable template for creating roundtable participants. Templates define which

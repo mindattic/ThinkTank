@@ -1,6 +1,6 @@
-using LLMThinkTank.Core.Models;
+using ThinkTank.Core.Models;
 
-namespace LLMThinkTank.Core.Services;
+namespace ThinkTank.Core.Services;
 
 /// <summary>
 /// Uses an LLM provider to generate realistic human first names for AI participants.
@@ -10,13 +10,13 @@ namespace LLMThinkTank.Core.Services;
 /// </summary>
 public class NameGeneratorService
 {
-    private readonly LlmThinkTankService thinkTank;
-    private readonly LlmThinkTankSettingsService settings;
+    private readonly ThinkTankService thinkTank;
+    private readonly ThinkTankSettingsService settings;
 
     /// <summary>
     /// Initializes a new instance with access to the LLM dispatch service and settings.
     /// </summary>
-    public NameGeneratorService(LlmThinkTankService thinkTank, LlmThinkTankSettingsService settings)
+    public NameGeneratorService(ThinkTankService thinkTank, ThinkTankSettingsService settings)
     {
         this.thinkTank = thinkTank;
         this.settings = settings;

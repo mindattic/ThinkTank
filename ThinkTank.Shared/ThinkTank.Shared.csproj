@@ -2,14 +2,14 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <RootNamespace>LLMThinkTank.Shared</RootNamespace>
+        <RootNamespace>ThinkTank.Shared</RootNamespace>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\LLMThinkTank.Core\LLMThinkTank.Core.csproj" />
+        <ProjectReference Include="..\ThinkTank.Core\ThinkTank.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>

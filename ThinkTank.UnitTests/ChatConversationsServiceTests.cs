@@ -1,8 +1,8 @@
 using NUnit.Framework;
-using LLMThinkTank.Core.Models;
-using LLMThinkTank.Core.Services;
+using ThinkTank.Core.Models;
+using ThinkTank.Core.Services;
 
-namespace LLMThinkTank.UnitTests;
+namespace ThinkTank.UnitTests;
 
 [TestFixture]
 public class ChatConversationsServiceTests
