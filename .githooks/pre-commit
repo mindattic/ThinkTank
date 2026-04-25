@@ -3,7 +3,7 @@
 # If any test fails, the commit is blocked.
 
 echo "Running unit tests..."
-dotnet test LLMThinkTank.UnitTests --verbosity minimal --no-restore 2>&1
+dotnet test ThinkTank.UnitTests --verbosity minimal --no-restore 2>&1
 
 if [ $? -ne 0 ]; then
     echo ""
