@@ -1,4 +1,4 @@
-# LLMThinkTank Project Rules
+# ThinkTank Project Rules
 
 ## Planned Feature: LLMVoting Integration
 
@@ -44,10 +44,10 @@ Participants see this as a `[Vote Result]:` user message in subsequent turns, id
 
 ### Implementation Steps (in order)
 
-1. **`LLMThinkTank.Core.csproj`** — add `<ProjectReference>` pointing to `../../../LLMVoting/LLMVoting/LLMVoting.csproj` (sibling repo, same relative path used by StreetSamurai)
-2. **`LLMThinkTank.Blazor/Program.cs`** — register `services.AddLLMVoting(sp => ...)` using `SettingsService` API keys
-3. **`LLMThinkTank.Core/Services/VotingService.cs`** (new) — thin wrapper mapping `ChatParticipant[]` + question → `VoterProfile[]` → `LLMVotingService.VoteWithProfilesAsync()`
-4. **`LLMThinkTank.Shared/Components/Pages/Chat.razor`** — "Call Vote" button + vote config dialog (question text, vote type, quorum), pause/resume loop logic, result injection into `sharedHistory`
+1. **`ThinkTank.Core.csproj`** — add `<ProjectReference>` pointing to `../../../LLMVoting/LLMVoting/LLMVoting.csproj` (sibling repo, same relative path used by StreetSamurai)
+2. **`ThinkTank.Blazor/Program.cs`** — register `services.AddLLMVoting(sp => ...)` using `SettingsService` API keys
+3. **`ThinkTank.Core/Services/VotingService.cs`** (new) — thin wrapper mapping `ChatParticipant[]` + question → `VoterProfile[]` → `LLMVotingService.VoteWithProfilesAsync()`
+4. **`ThinkTank.Shared/Components/Pages/Chat.razor`** — "Call Vote" button + vote config dialog (question text, vote type, quorum), pause/resume loop logic, result injection into `sharedHistory`
 5. **`ChatModels.cs`** — no changes needed; vote result is just a special `SharedTurn`
 
 ### Out of Scope (follow-on)

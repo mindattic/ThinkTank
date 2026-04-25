@@ -9,6 +9,9 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddSingleton<HttpClient>();
+// MindAttic.Legion is the gateway for all LLM communication. Register before
+// any service that calls into LLMs (ThinkTankService, VotingService).
+builder.Services.AddLegionClient();
 builder.Services.AddSingleton(sp =>
 {
     var settings = new SettingsService();

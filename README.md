@@ -117,7 +117,7 @@ LLM Think Tank lets you pit multiple AI models against each other in structured 
 +----------------------------------------------------------+
          |                    |                  |
     +----+-----+    +--------+--------+   +----+------+
-    | Settings |    |  LlmThinkTank   |   |Appearance |
+    | Settings |    |  ThinkTank   |   |Appearance |
     | Service  |    |    Service       |   | Service   |
     +----+-----+    +--------+--------+   +-----------+
          |                   |
@@ -271,7 +271,7 @@ After the first round completes, the app generates a conversation title in the b
 ## Project Structure
 
 ```
-LLMThinkTank/
+ThinkTank/
 +-- Components/
 |   +-- Layout/
 |   |   +-- MainLayout.razor          # App shell (NavMenu + content)
@@ -289,7 +289,7 @@ LLMThinkTank/
 |   +-- Routes.razor
 |   +-- _Imports.razor
 +-- Services/
-|   +-- LlmThinkTankService.cs        # Core AI orchestration (~565 lines)
+|   +-- ThinkTankService.cs        # Core AI orchestration (~565 lines)
 |   +-- SettingsService.cs             # Persistence layer (~360 lines)
 |   +-- AppearanceService.cs           # Theme management
 |   +-- ChatConversationsService.cs    # Tab/conversation management
@@ -306,14 +306,14 @@ LLMThinkTank/
 +-- App.xaml / App.xaml.cs             # MAUI app entry
 +-- MainPage.xaml                      # BlazorWebView host
 +-- MauiProgram.cs                     # DI registration
-+-- LLMThinkTank.csproj               # Project config (.NET 10, MAUI)
++-- ThinkTank.csproj               # Project config (.NET 10, MAUI)
 ```
 
 ---
 
 ## Services
 
-### LlmThinkTankService
+### ThinkTankService
 
 The core orchestration engine. Routes API calls to the correct provider based on participant configuration.
 
@@ -336,7 +336,7 @@ The core orchestration engine. Routes API calls to the correct provider based on
 
 ### SettingsService
 
-Handles all persistence to `%LOCALAPPDATA%\MindAttic\LLMThinkTank\Settings.json`.
+Handles all persistence to `%LOCALAPPDATA%\MindAttic\ThinkTank\Settings.json`.
 
 **Manages:**
 - Provider auth configs (API keys, models, max tokens)
@@ -426,7 +426,7 @@ Each provider has a dedicated color used throughout the UI for avatars, message 
 All data is stored in the local application data directory:
 
 ```
-%LOCALAPPDATA%\MindAttic\LLMThinkTank\
+%LOCALAPPDATA%\MindAttic\ThinkTank\
 +-- Settings.json              # All app settings
 +-- Personalities/             # Personality markdown files
 |   +-- {templateId}.md

@@ -82,11 +82,11 @@ public class ThinkTankSettingsService
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank");
 
     private static string LegacySettingsRoot
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "LLMThinkTank");
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank");
 
     /// <summary>
     /// One-shot rename of the legacy app-data folder from
-    /// <c>%LOCALAPPDATA%\MindAttic\LLMThinkTank</c> to <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c>
+    /// <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c> to <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c>
     /// after the app rename. Idempotent: only runs when the new folder is missing
     /// and the legacy one exists, so existing users keep every persisted
     /// conversation, template, and personality file. Failures are silent —
