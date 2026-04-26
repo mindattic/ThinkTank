@@ -217,89 +217,32 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Creates the built-in default participant templates (one per supported provider).
-    /// Each template uses the provider's standard personality prompt and default model.
+    /// Creates the built-in default participant templates by sourcing one persona per
+    /// provider from <see cref="PersonaLibrary.Defaults"/>. Each persona has an empty
+    /// PersonalityMarkdown by Legion convention — the call layer in
+    /// <see cref="ThinkTankService"/> wraps empty prompts with a generic roundtable
+    /// framing so the LLM still has context about the format.
     /// </summary>
-    private static List<ParticipantTemplate> CreateDefaultTemplates() => new()
+    private static List<ParticipantTemplate> CreateDefaultTemplates()
     {
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "openai",
-            DisplayName: "ChatGPT",
-            PersonalityMarkdown: "You are ChatGPT, made by OpenAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be conversational and curious. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "claude",
-            DisplayName: "Claude",
-            PersonalityMarkdown: "You are Claude, made by Anthropic. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be thoughtful and honest. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "gemini",
-            DisplayName: "Gemini",
-            PersonalityMarkdown: "You are Gemini, made by Google. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be analytical and creative. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "deepseek",
-            DisplayName: "DeepSeek",
-            PersonalityMarkdown: "You are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "mistral",
-            DisplayName: "Mistral",
-            PersonalityMarkdown: "You are Mistral, made by Mistral AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be sharp and efficient. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "xai",
-            DisplayName: "Grok",
-            PersonalityMarkdown: "You are Grok, made by xAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be witty and bold. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "groq",
-            DisplayName: "Groq",
-            PersonalityMarkdown: "You are an AI running on Groq's ultra-fast inference engine. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be quick and insightful. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "together",
-            DisplayName: "Together",
-            PersonalityMarkdown: "You are an AI running on Together AI's platform. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be collaborative and thoughtful. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "openrouter",
-            DisplayName: "OpenRouter",
-            PersonalityMarkdown: "You are an AI accessed through OpenRouter. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be versatile and engaging. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "fireworks",
-            DisplayName: "Fireworks",
-            PersonalityMarkdown: "You are an AI running on Fireworks AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be fast and perceptive. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true),
-        new ParticipantTemplate(
-            TemplateId: ChatConversationsService.NewId(),
-            ProviderId: "cohere",
-            DisplayName: "Cohere",
-            PersonalityMarkdown: "You are Command, made by Cohere. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be grounded and clear. 2-3 sentences max.",
-            AuthOverrideJson: null,
-            IsDefault: true)
-    };
+        const string defaultPrefix = "default-";
+        var result = new List<ParticipantTemplate>(PersonaLibrary.Defaults.Count);
+        foreach (var persona in PersonaLibrary.Defaults)
+        {
+            var providerId = persona.Id.StartsWith(defaultPrefix, StringComparison.Ordinal)
+                ? persona.Id[defaultPrefix.Length..]
+                : persona.Id;
+
+            result.Add(new ParticipantTemplate(
+                TemplateId: $"legion-{persona.Id}",
+                ProviderId: providerId,
+                DisplayName: persona.Name,
+                PersonalityMarkdown: persona.PersonalityMarkdown,
+                AuthOverrideJson: null,
+                IsDefault: true));
+        }
+        return result;
+    }
 
     /// <summary>
     /// Backfills default templates and provider auth entries for any providers that were

@@ -87,22 +87,8 @@
                     <div class="templates-left">
                         <div class="templates-left-header">
                             <h2 id="personas-heading" style="margin:0; font-size:1rem;">Personas</h2>
-                            <div class="add-dropdown">
-                                <button class="settings-tab" @onclick="ToggleAddDropdown"
-                                        aria-haspopup="menu" aria-expanded="@(_showAddDropdown ? "true" : "false")"
-                                        aria-label="Add a new persona">+ Add</button>
-                                @if (_showAddDropdown)
-                                {
-                                    <div class="add-dropdown-menu" role="menu" aria-label="Add persona for provider">
-                                        @foreach (var p in _providerOptions)
-                                        {
-                                            <button class="add-dropdown-item" role="menuitem" @onclick="(() => AddTemplateForProvider(p.Id))">
-                                                <span aria-hidden="true">@GetProviderAvatar(p.Id)</span> @p.Name
-                                            </button>
-                                        }
-                                    </div>
-                                }
-                            </div>
+                            <button class="settings-tab" @onclick="AddCustomPersona"
+                                    aria-label="Add a new custom persona">+ Add Custom Persona</button>
                         </div>
                         <ul class="templates-left-list" role="list" aria-labelledby="personas-heading">
                             @foreach (var t in ThinkTankSettings.Templates)
@@ -177,7 +163,6 @@
     private enum SettingsSection { Providers, Defaults, Appearance }
 
     private string? _activeTemplateId;
-    private bool _showAddDropdown;
     private SettingsSection _activeSection = SettingsSection.Providers;
     private bool _testing;
     private string? _lastError;
@@ -266,22 +251,18 @@
 
     private string SharedCredentialsPath => MindAtticCredentialStore.ProvidersFilePath;
 
-    private void ToggleAddDropdown()
+    private async Task AddCustomPersona()
     {
-        _showAddDropdown = !_showAddDropdown;
-    }
-
-    private async Task AddTemplateForProvider(string providerId)
-    {
-        _showAddDropdown = false;
-        var llmName = _providerOptions.FirstOrDefault(p => p.Id == providerId).Name;
+        // Default new custom personas to claude (most likely to have a key); user can change in the Provider field.
+        const string providerId = "claude";
+        var llmName = _providerOptions.FirstOrDefault(p => p.Id == providerId).Name ?? providerId;
         var firstName = HumanNames.NextFirstName();
-        var fallbackPersonality = $"# {firstName} ({llmName})\n\n- Voice: curious and concise\n- Values: clarity, honesty\n- Habits: asks follow-up questions\n- Biases: may over-generalize\n";
+        var fallbackPersonality = $"# {firstName}\n\n- Voice: curious and concise\n- Values: clarity, honesty\n- Habits: asks follow-up questions\n- Biases: may over-generalize\n";
 
         var template = new ParticipantTemplate(
             TemplateId: ChatConversationsService.NewId(),
             ProviderId: providerId,
-            DisplayName: $"{firstName} ({llmName})",
+            DisplayName: firstName,
             PersonalityMarkdown: fallbackPersonality,
             AuthOverrideJson: null);
 

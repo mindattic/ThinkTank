@@ -121,6 +121,61 @@
         </div>
     }
 
+    @if (_legionPickerVisible)
+    {
+        <div class="dialog-overlay" @onclick="CloseLegionPicker">
+            <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="legion-picker-title"
+                 style="max-width:640px; width:90%;" @onclick:stopPropagation>
+                <div id="legion-picker-title" class="dialog-title">Add Persona from Legion Library</div>
+
+                <label for="legion-search" class="options-label">Search</label>
+                <input id="legion-search" class="rename-input" placeholder="archetype, worldview, name..."
+                       value="@_legionSearchText" @oninput="OnLegionSearchInput" />
+
+                <label for="legion-provider" class="options-label" style="margin-top:0.5rem;">Provider</label>
+                <select id="legion-provider" class="settings-select" @bind="_legionSelectedProvider">
+                    @foreach (var pp in ThinkTankService.Models)
+                    {
+                        <option value="@pp.Id">@pp.Name</option>
+                    }
+                </select>
+
+                <div role="listbox" aria-label="Legion enriched personas"
+                     style="margin-top:0.75rem; max-height:340px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius);">
+                    @{ var matches = FilterLegionPersonas(_legionSearchText); }
+                    @if (matches.Count == 0)
+                    {
+                        <div class="status-log-empty">No personas match.</div>
+                    }
+                    else
+                    {
+                        @foreach (var persona in matches)
+                        {
+                            var isSel = _legionSelectedPersonaId == persona.Id;
+                            <button type="button" role="option" aria-selected="@(isSel ? "true" : "false")"
+                                    class="context-menu-item @(isSel ? "active" : "")"
+                                    style="display:block; width:100%; text-align:left; white-space:normal;"
+                                    @onclick="(() => _legionSelectedPersonaId = persona.Id)">
+                                <strong>@persona.Name</strong>
+                                <div style="font-size:0.8rem; opacity:0.75;">@PreviewPersona(persona.PersonalityMarkdown)</div>
+                            </button>
+                        }
+                    }
+                </div>
+
+                <p class="options-hint" style="margin-top:0.5rem;">
+                    Showing @(FilterLegionPersonas(_legionSearchText).Count) of @PersonaLibrary.Enriched.Count library personas.
+                </p>
+
+                <div class="dialog-actions" style="margin-top:1rem;">
+                    <button class="reset-btn" @onclick="CloseLegionPicker">Cancel</button>
+                    <button class="start-btn" @onclick="ConfirmAddLegionPersona"
+                            disabled="@(string.IsNullOrEmpty(_legionSelectedPersonaId))">Add to conversation</button>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (Active is null)
     {
         <div class="setup-panel" role="region" aria-label="Empty state">
@@ -182,6 +237,23 @@
                                 </div>
                             </div>
                         }
+                        @foreach (var p in Active.Participants.Where(p => p.TemplateId.StartsWith("legion-persona-", StringComparison.Ordinal)))
+                        {
+                            <div class="tooltip-wrap" role="listitem">
+                                <button class="participant-pill selected" type="button"
+                                        aria-pressed="true"
+                                        aria-label="@($"{p.DisplayName} ({p.ProviderId}), Legion persona, click to remove")"
+                                        @onclick="(() => RemoveLegionParticipant(p))">
+                                    <span class="pill-avatar" aria-hidden="true">@GetProviderAvatar(p.ProviderId)</span>
+                                    <span>@p.DisplayName</span>
+                                </button>
+                            </div>
+                        }
+                        <div role="listitem">
+                            <button class="participant-pill" type="button"
+                                    aria-label="Add a Legion library persona"
+                                    @onclick="OpenLegionPicker">+ From library</button>
+                        </div>
                     </div>
                 </div>
 
@@ -621,6 +693,79 @@
         _followConversation = true;
         await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
         await InvokeAsync(StateHasChanged);
+    }
+
+    private bool _legionPickerVisible;
+    private string _legionSearchText = "";
+    private string _legionSelectedProvider = "claude";
+    private string? _legionSelectedPersonaId;
+
+    private void OpenLegionPicker()
+    {
+        _legionSearchText = "";
+        _legionSelectedPersonaId = null;
+        if (string.IsNullOrEmpty(_legionSelectedProvider))
+            _legionSelectedProvider = ThinkTankService.Models.FirstOrDefault()?.Id ?? "claude";
+        _legionPickerVisible = true;
+    }
+
+    private void CloseLegionPicker() => _legionPickerVisible = false;
+
+    private void OnLegionSearchInput(ChangeEventArgs e)
+    {
+        _legionSearchText = e.Value?.ToString() ?? "";
+        _legionSelectedPersonaId = null;
+    }
+
+    private static IReadOnlyList<Persona> FilterLegionPersonas(string searchText)
+    {
+        var all = PersonaLibrary.Enriched;
+        if (string.IsNullOrWhiteSpace(searchText))
+            return all.Take(50).ToList();
+
+        var query = searchText.Trim();
+        return all.Where(p =>
+                p.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                p.PersonalityMarkdown.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(100)
+            .ToList();
+    }
+
+    private static string PreviewPersona(string markdown)
+    {
+        if (string.IsNullOrEmpty(markdown)) return "";
+        var firstLine = markdown.Split('\n').FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? "";
+        return firstLine.Length > 140 ? firstLine[..140] + "…" : firstLine;
+    }
+
+    private void ConfirmAddLegionPersona()
+    {
+        if (Active is null || string.IsNullOrEmpty(_legionSelectedPersonaId))
+            return;
+
+        var persona = PersonaLibrary.Enriched.FirstOrDefault(p => p.Id == _legionSelectedPersonaId);
+        if (persona is null)
+            return;
+
+        // Use the Legion persona id as the participant's TemplateId so the participant
+        // is recognizable as a library-sourced (non-Templated) participant in the UI.
+        Active.Participants.Add(new ChatParticipant(
+            ParticipantId: ChatConversationsService.NewId(),
+            TemplateId: $"legion-{persona.Id}",
+            ProviderId: _legionSelectedProvider,
+            DisplayName: persona.Name,
+            PersonalityMarkdown: persona.PersonalityMarkdown,
+            AuthOverrideJson: null));
+
+        Conversations.NotifyChanged();
+        _legionPickerVisible = false;
+    }
+
+    private void RemoveLegionParticipant(ChatParticipant p)
+    {
+        if (Active is null) return;
+        Active.Participants.Remove(p);
+        Conversations.NotifyChanged();
     }
 
     private ConversationUiState GetState(ChatConversation? c)

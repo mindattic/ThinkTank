@@ -282,6 +282,9 @@ public class ThinkTankService
     /// its own prior turns as <c>assistant</c> and everyone else's turns as
     /// <c>user</c> messages tagged with the speaker's display name.
     /// </summary>
+    private const string DefaultRoundtableFraming =
+        "You are in a live roundtable with other AI systems. Read what they said and respond directly. Be conversational. 2-3 sentences max.";
+
     private static (string systemPrompt, IReadOnlyList<ChatTurn> turns) BuildPrompt(
         string actualProviderId,
         string speakerProviderId,
@@ -289,7 +292,10 @@ public class ThinkTankService
         string topic,
         List<SharedTurn> history)
     {
-        var systemPrompt = $"{personalityMarkdown}\n\nTopic: \"{topic}\"";
+        var personality = string.IsNullOrWhiteSpace(personalityMarkdown)
+            ? DefaultRoundtableFraming
+            : personalityMarkdown;
+        var systemPrompt = $"{personality}\n\nTopic: \"{topic}\"";
         var recent = TrimHistory(history);
         var turns = new List<ChatTurn>();
 
