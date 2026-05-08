@@ -44,7 +44,7 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 
 ### Multi-Provider AI Conversations
 
-- **4 providers**: OpenAI (ChatGPT), Anthropic (Claude), Google (Gemini), DeepSeek
+- **11 providers**: OpenAI, Anthropic, Google, DeepSeek, Mistral, xAI, Groq, Together AI, OpenRouter, Fireworks, and Cohere
 - Each participant calls its provider's API with full conversation history
 - Configurable model and max tokens per provider
 
@@ -59,7 +59,7 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 ### Personality System
 
 - Markdown-based personality definitions per participant
-- 4 built-in default templates (one per provider)
+- Built-in default templates for every supported provider
 - Create unlimited custom personalities
 - AI-powered personality generation — describe what you want and the LLM writes it
 - Per-template auth override (use different API keys or models per participant)
@@ -136,7 +136,7 @@ All services are registered as singletons in `MauiProgram.cs` for shared global 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) with MAUI workload
-- API keys for at least one provider (OpenAI, Anthropic, Google AI, or DeepSeek)
+- An API key for at least one supported provider
 
 ### Build & Run
 
@@ -177,7 +177,7 @@ Each provider's configuration is stored as a JSON object:
 
 | Field | Description |
 |-------|-------------|
-| `type` | Auth type: `"bearer"` (OpenAI/DeepSeek), `"anthropic"` (Claude), `"google"` (Gemini) |
+| `type` | Auth type: `"bearer"` (OpenAI-compatible), `"anthropic"` (Claude), or `"google"` (Gemini) |
 | `apiKey` | Your API key for the provider |
 | `model` | Model identifier to use for API calls |
 | `maxTokens` | Maximum output tokens per response (default: 2048) |
@@ -195,8 +195,9 @@ Each provider's configuration is stored as a JSON object:
 
 Personalities are markdown templates that define how each AI participant behaves in conversation. The personality markdown is sent as the system prompt to the provider's API.
 
-- **Default templates**: ChatGPT, Claude, Gemini, DeepSeek (built-in, cannot be deleted)
+- **Default templates**: one per supported provider/runtime (built-in, cannot be deleted)
 - **Custom templates**: Create via Settings > Personalities > "+ Add"
+- **Model override**: Custom templates can pin a persona to a specific model
 - **Generate**: Click "Generate" to have the AI write a personality for you
 - **Auth Override**: Each template can optionally override the provider's default auth config (different API key, model, or maxTokens)
 
@@ -524,4 +525,4 @@ The app uses JS interop for DOM operations that Blazor can't handle natively:
 
 - **Do not commit API keys.** Provider auth JSON is stored in Local AppData and should remain local.
 - API responses in the Diagnostics panel are redacted (content replaced with "...") to prevent accidental exposure.
-- All HTTP communication uses HTTPS.
+- All provider traffic uses HTTPS.

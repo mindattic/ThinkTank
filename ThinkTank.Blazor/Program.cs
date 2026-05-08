@@ -57,7 +57,12 @@ builder.Services.AddLLMVoting(sp =>
         }
         catch { }
     }
-    return new VotingConfiguration { ApiKeys = apiKeys, ModelOverrides = modelOverrides };
+    return new VotingConfiguration
+    {
+        ApiKeys = apiKeys,
+        ModelOverrides = modelOverrides,
+        AllowedProviderIds = LlmProviderCatalog.DefaultIds.ToHashSet(StringComparer.OrdinalIgnoreCase)
+    };
 });
 builder.Services.AddSingleton<VotingService>();
 

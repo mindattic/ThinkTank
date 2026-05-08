@@ -39,20 +39,13 @@ public class ThinkTankService
         ["claude"]     = ("◈", "You are Claude, made by Anthropic. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be thoughtful and honest. 2-3 sentences max."),
         ["gemini"]     = ("✦", "You are Gemini, made by Google. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be analytical and creative. 2-3 sentences max."),
         ["deepseek"]   = ("◉", "You are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max."),
-        ["mistral"]    = ("▲", "You are Mistral, made by Mistral AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be sharp and efficient. 2-3 sentences max."),
-        ["xai"]        = ("✕", "You are Grok, made by xAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be witty and bold. 2-3 sentences max."),
-        ["groq"]       = ("⚡", "You are an AI running on Groq's ultra-fast inference engine. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be quick and insightful. 2-3 sentences max."),
-        ["together"]   = ("⊕", "You are an AI running on Together AI's platform. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be collaborative and thoughtful. 2-3 sentences max."),
-        ["openrouter"] = ("⬢", "You are an AI accessed through OpenRouter. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be versatile and engaging. 2-3 sentences max."),
-        ["fireworks"]  = ("🔥", "You are an AI running on Fireworks AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be fast and perceptive. 2-3 sentences max."),
-        ["cohere"]     = ("◇", "You are Command, made by Cohere. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be grounded and clear. 2-3 sentences max."),
     };
 
     /// <summary>
     /// Registry of all supported LLM providers, sourced from Legion's catalog
     /// (display names + key URLs) with ThinkTank's avatar + roundtable persona overlaid.
     /// </summary>
-    public List<LlmModel> Models { get; } = LlmProviderCatalog.All
+    public List<LlmModel> Models { get; } = LlmProviderCatalog.Default
         .Where(p => RoundtableDecorations.ContainsKey(p.Id))
         .Select(p =>
         {
@@ -128,14 +121,15 @@ public class ThinkTankService
             actualAuthOverride = null;  // per-template override points at non-Claude key
         }
 
-        if (!LlmProviderCatalog.IsSupported(actualProviderId))
+        var providerInfo = LlmProviderCatalog.Get(actualProviderId);
+        if (providerInfo is null)
             throw new ArgumentException($"Unknown provider: {actualProviderId}");
 
         var apiKey = GetApiKey(actualProviderId, actualAuthOverride);
         if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException($"No API key configured for provider '{actualProviderId}'.");
 
-        var defaultModel = LlmProviderCatalog.Get(actualProviderId)?.DefaultModel ?? "";
+        var defaultModel = providerInfo.DefaultModel ?? "";
         var model        = GetModel(actualProviderId, actualAuthOverride, defaultModel);
         var maxTokens    = GetMaxTokens(actualProviderId, actualAuthOverride);
 
@@ -175,13 +169,6 @@ public class ThinkTankService
             "openai"     => "ChatGPT (OpenAI)",
             "gemini"     => "Gemini (Google)",
             "deepseek"   => "DeepSeek",
-            "mistral"    => "Mistral",
-            "xai"        => "Grok (xAI)",
-            "groq"       => "an AI on Groq's inference engine",
-            "together"   => "an AI on Together AI",
-            "openrouter" => "an AI accessed via OpenRouter",
-            "fireworks"  => "an AI on Fireworks AI",
-            "cohere"     => "Command (Cohere)",
             _            => originalProviderId
         };
 
@@ -334,7 +321,7 @@ public class ThinkTankService
     {
         if (string.IsNullOrWhiteSpace(text)) return text;
         text = text.TrimStart();
-        var pattern = "^(?:\\s*(?:\\[(?:chatgpt|gpt|assistant|openai|claude|gemini|deepseek|mistral|grok|xai|groq|together|openrouter|fireworks|cohere|command)\\]\\s*:|(?:chatgpt|gpt|assistant|openai|claude|gemini|deepseek|mistral|grok|xai|groq|together|openrouter|fireworks|cohere|command)\\s*:))+\\s*";
+        var pattern = "^(?:\\s*(?:\\[(?:chatgpt|gpt|assistant|openai|claude|gemini|deepseek)\\]\\s*:|(?:chatgpt|gpt|assistant|openai|claude|gemini|deepseek)\\s*:))+\\s*";
         text = System.Text.RegularExpressions.Regex.Replace(
             text, pattern, "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         return text.TrimStart();

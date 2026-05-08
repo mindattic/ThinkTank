@@ -118,11 +118,18 @@
 
                             <label for="persona-provider">Provider</label>
                             <select id="persona-provider" value="@_activeTemplate.ProviderId" @onchange="OnTemplateProviderChanged" disabled="@(_activeTemplate.IsDefault)">
-                                @foreach (var p in _providerOptions)
+                                @foreach (var p in ProviderOptions)
                                 {
                                     <option value="@p.Id">@p.Name</option>
                                 }
                             </select>
+
+                            <label for="persona-model">Model override</label>
+                            <input id="persona-model"
+                                   value='@GetTemplateAuthField(_activeTemplate, "model")'
+                                   @oninput="OnTemplateModelChanged"
+                                   placeholder="@GetDefaultModel(_activeTemplate.ProviderId)"
+                                   disabled="@(_activeTemplate.IsDefault)" />
 
                             @* Custom Auth Config - hidden for now, will add later
                             <label>Custom Auth Config (JSON, optional)</label>
@@ -136,9 +143,9 @@
                             <div class="settings-row">
                                 <button class="start-btn" @onclick="SaveActiveTemplate" disabled="@(_activeTemplate is null || _activeTemplate.IsDefault)">Save</button>
                                 <button class="start-btn" @onclick="TestTemplate" disabled="@_testing" aria-busy="@(_testing ? "true" : "false")">@(_testing ? "Testing…" : "Test connection")</button>
-                                <button class="reset-btn" @onclick="RequestRemoveTemplate" disabled="@(_activeTemplate.IsDefault)">Remove</button>
+                                <button class="reset-btn" @onclick="RequestRemoveTemplate" disabled="@(_activeTemplate?.IsDefault ?? true)">Remove</button>
                                 <span style="flex:1"></span>
-                                <button class="start-btn" @onclick="GeneratePersonality" disabled="@(_generating || _activeTemplate.IsDefault)" aria-busy="@(_generating ? "true" : "false")">@(_generating ? "Generating…" : "Generate")</button>
+                                <button class="start-btn" @onclick="GeneratePersonality" disabled="@(_generating || (_activeTemplate?.IsDefault ?? true))" aria-busy="@(_generating ? "true" : "false")">@(_generating ? "Generating…" : "Generate")</button>
                             </div>
 
                             @if (!string.IsNullOrWhiteSpace(_lastError))
@@ -173,20 +180,8 @@
         ? null
         : ThinkTankSettings.Templates.FirstOrDefault(t => t.TemplateId == _activeTemplateId);
 
-    private readonly List<(string Id, string Name)> _providerOptions = new()
-    {
-        ("openai", "ChatGPT"),
-        ("claude", "Claude"),
-        ("gemini", "Gemini"),
-        ("deepseek", "DeepSeek"),
-        ("mistral", "Mistral"),
-        ("xai", "Grok"),
-        ("groq", "Groq"),
-        ("together", "Together"),
-        ("openrouter", "OpenRouter"),
-        ("fireworks", "Fireworks"),
-        ("cohere", "Cohere")
-    };
+    private List<(string Id, string Name)> ProviderOptions
+        => ThinkTank.Models.Select(m => (m.Id, m.Name)).ToList();
 
     protected override void OnInitialized()
     {
@@ -255,7 +250,7 @@
     {
         // Default new custom personas to claude (most likely to have a key); user can change in the Provider field.
         const string providerId = "claude";
-        var llmName = _providerOptions.FirstOrDefault(p => p.Id == providerId).Name ?? providerId;
+        var llmName = ProviderOptions.FirstOrDefault(p => p.Id == providerId).Name ?? providerId;
         var firstName = HumanNames.NextFirstName();
         var fallbackPersonality = $"# {firstName}\n\n- Voice: curious and concise\n- Values: clarity, honesty\n- Habits: asks follow-up questions\n- Biases: may over-generalize\n";
 
@@ -413,10 +408,19 @@
     private void OnTemplateNameChanged(ChangeEventArgs e)
         => UpdateActiveTemplate(t => t with { DisplayName = e.Value?.ToString() ?? "" });
 
+    private string GetTemplateAuthField(ParticipantTemplate? template, string field)
+        => GetJsonString(template?.AuthOverrideJson, field);
+
+    private static string GetDefaultModel(string providerId)
+        => LlmProviderCatalog.Get(providerId)?.DefaultModel ?? "";
+
+    private void OnTemplateModelChanged(ChangeEventArgs e)
+        => UpdateActiveTemplate(t => t with { AuthOverrideJson = SetJsonString(t.AuthOverrideJson, "model", e.Value?.ToString()) });
+
     private void OnTemplateProviderChanged(ChangeEventArgs e)
     {
         var providerId = e.Value?.ToString() ?? "openai";
-        var providerName = _providerOptions.FirstOrDefault(p => p.Id == providerId).Name ?? providerId;
+        var providerName = ProviderOptions.FirstOrDefault(p => p.Id == providerId).Name ?? providerId;
 
         UpdateActiveTemplate(t =>
         {
@@ -481,6 +485,49 @@
         {
             _testing = false;
         }
+    }
+
+    private static string GetJsonString(string? json, string field)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "";
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(field, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String
+                ? value.GetString() ?? ""
+                : "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string? SetJsonString(string? json, string field, string? value)
+    {
+        System.Text.Json.Nodes.JsonObject obj;
+        try
+        {
+            obj = string.IsNullOrWhiteSpace(json)
+                ? new System.Text.Json.Nodes.JsonObject()
+                : System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject() ?? new System.Text.Json.Nodes.JsonObject();
+        }
+        catch
+        {
+            obj = new System.Text.Json.Nodes.JsonObject();
+        }
+
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            obj.Remove(field);
+        else
+            obj[field] = trimmed;
+
+        return obj.Count == 0
+            ? null
+            : obj.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
     }
 
     public void Dispose()

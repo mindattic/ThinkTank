@@ -702,11 +702,25 @@ h1:focus {
     --claude:   #cc785c;
     --gemini:   #4285f4;
     --deepseek: #a855f7;
+    --mistral: #f97316;
+    --xai: #e5e7eb;
+    --groq: #f59e0b;
+    --together: #14b8a6;
+    --openrouter: #38bdf8;
+    --fireworks: #ef4444;
+    --cohere: #84cc16;
 
     --openai-bg:   #0d1f1a;
     --claude-bg:   #1f1510;
     --gemini-bg:   #0d1525;
     --deepseek-bg: #150d1f;
+    --mistral-bg: #241205;
+    --xai-bg: #111827;
+    --groq-bg: #241605;
+    --together-bg: #06201c;
+    --openrouter-bg: #061a24;
+    --fireworks-bg: #260b0b;
+    --cohere-bg: #101d07;
 }
 
 /* Settings tab content padding */
@@ -1615,6 +1629,13 @@ html, body {
 .message-bubble.claude   { background: var(--claude-bg);   border-color: var(--claude); }
 .message-bubble.gemini   { background: var(--gemini-bg);   border-color: var(--gemini); }
 .message-bubble.deepseek { background: var(--deepseek-bg); border-color: var(--deepseek); }
+.message-bubble.mistral { background: var(--mistral-bg); border-color: var(--mistral); }
+.message-bubble.xai { background: var(--xai-bg); border-color: var(--xai); }
+.message-bubble.groq { background: var(--groq-bg); border-color: var(--groq); }
+.message-bubble.together { background: var(--together-bg); border-color: var(--together); }
+.message-bubble.openrouter { background: var(--openrouter-bg); border-color: var(--openrouter); }
+.message-bubble.fireworks { background: var(--fireworks-bg); border-color: var(--fireworks); }
+.message-bubble.cohere { background: var(--cohere-bg); border-color: var(--cohere); }
 .message-bubble.error-bubble { border-color: #aa3333; background: #1a0808; }
 
 .bubble-header {
@@ -1637,6 +1658,13 @@ html, body {
 .message-bubble.claude   .bubble-name { color: var(--claude); }
 .message-bubble.gemini   .bubble-name { color: var(--gemini); }
 .message-bubble.deepseek .bubble-name { color: var(--deepseek); }
+.message-bubble.mistral .bubble-name { color: var(--mistral); }
+.message-bubble.xai .bubble-name { color: var(--xai); }
+.message-bubble.groq .bubble-name { color: var(--groq); }
+.message-bubble.together .bubble-name { color: var(--together); }
+.message-bubble.openrouter .bubble-name { color: var(--openrouter); }
+.message-bubble.fireworks .bubble-name { color: var(--fireworks); }
+.message-bubble.cohere .bubble-name { color: var(--cohere); }
 
 .bubble-round {
     margin-left: auto;
@@ -1673,6 +1701,13 @@ html, body {
 .typing-indicator.claude   { background: var(--claude-bg);   border-color: var(--claude);   color: var(--claude); }
 .typing-indicator.gemini   { background: var(--gemini-bg);   border-color: var(--gemini);   color: var(--gemini); }
 .typing-indicator.deepseek { background: var(--deepseek-bg); border-color: var(--deepseek); color: var(--deepseek); }
+.typing-indicator.mistral { background: var(--mistral-bg); border-color: var(--mistral); color: var(--mistral); }
+.typing-indicator.xai { background: var(--xai-bg); border-color: var(--xai); color: var(--xai); }
+.typing-indicator.groq { background: var(--groq-bg); border-color: var(--groq); color: var(--groq); }
+.typing-indicator.together { background: var(--together-bg); border-color: var(--together); color: var(--together); }
+.typing-indicator.openrouter { background: var(--openrouter-bg); border-color: var(--openrouter); color: var(--openrouter); }
+.typing-indicator.fireworks { background: var(--fireworks-bg); border-color: var(--fireworks); color: var(--fireworks); }
+.typing-indicator.cohere { background: var(--cohere-bg); border-color: var(--cohere); color: var(--cohere); }
 
 .typing-dots {
     display: flex;

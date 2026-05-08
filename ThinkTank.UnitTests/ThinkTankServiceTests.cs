@@ -1,6 +1,8 @@
 using MindAttic.Legion;
+using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using System.Text;
 using NUnit.Framework;
 using ThinkTank.Core.Models;
 using ThinkTank.Core.Services;
@@ -30,9 +32,9 @@ public class ThinkTankServiceTests
     // ── Models registry ─────────────────────────────────────────────────
 
     [Test]
-    public void Models_Has11Providers()
+    public void Models_Has4Providers()
     {
-        Assert.That(sut.Models, Has.Count.EqualTo(11));
+        Assert.That(sut.Models, Has.Count.EqualTo(4));
     }
 
     [Test]
@@ -59,13 +61,6 @@ public class ThinkTankServiceTests
     [TestCase("claude")]
     [TestCase("gemini")]
     [TestCase("deepseek")]
-    [TestCase("mistral")]
-    [TestCase("xai")]
-    [TestCase("groq")]
-    [TestCase("together")]
-    [TestCase("openrouter")]
-    [TestCase("fireworks")]
-    [TestCase("cohere")]
     public void Models_ContainsExpectedProvider(string providerId)
     {
         Assert.That(sut.Models.Any(m => m.Id == providerId), Is.True, $"Missing provider: {providerId}");
@@ -84,10 +79,7 @@ public class ThinkTankServiceTests
 
     [TestCase("openai",   "ChatGPT (OpenAI)")]
     [TestCase("gemini",   "Gemini (Google)")]
-    [TestCase("xai",      "Grok (xAI)")]
-    [TestCase("cohere",   "Command (Cohere)")]
     [TestCase("deepseek", "DeepSeek")]
-    [TestCase("mistral",  "Mistral")]
     public void WrapPersonaForClaudeFallback_AnchorsPersonaToOriginalProvider(string providerId, string expectedLabel)
     {
         var wrapped = ThinkTankService.WrapPersonaForClaudeFallback(providerId, "You are friendly.");
@@ -166,9 +158,6 @@ public class ThinkTankServiceTests
 
     [TestCase("gemini", "Gemini: text here", "text here")]
     [TestCase("deepseek", "DeepSeek: reply", "reply")]
-    [TestCase("mistral", "[Mistral]: answer", "answer")]
-    [TestCase("xai", "Grok: witty reply", "witty reply")]
-    [TestCase("cohere", "Command: grounded", "grounded")]
     public void SanitizeModelOutput_StripsProviderPrefixes(string providerId, string input, string expected)
     {
         Assert.That(InvokeSanitize(providerId, input), Is.EqualTo(expected));
@@ -235,5 +224,22 @@ public class ThinkTankServiceTests
 
         // Just verify subscription doesn't throw - actual firing requires HTTP calls
         Assert.That(capturedProvider, Is.Null);
+    }
+
+    private sealed class StubChatHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+        public HttpRequestMessage? LastRequest { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            LastRequest = request;
+            var body = "{\"choices\":[{\"message\":{\"content\":\"local ok\"}}]}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            });
+        }
     }
 }

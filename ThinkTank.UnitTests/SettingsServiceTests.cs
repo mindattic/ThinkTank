@@ -43,7 +43,7 @@ public class SettingsServiceTests
     [Test]
     public void GetAuthJson_AllDefaultProviders_ReturnValidJson()
     {
-        var providers = new[] { "openai", "claude", "gemini", "deepseek", "mistral", "xai", "groq", "together", "openrouter", "fireworks", "cohere" };
+        var providers = new[] { "openai", "claude", "gemini", "deepseek" };
         foreach (var p in providers)
         {
             var json = sut.GetAuthJson(p);
@@ -98,22 +98,15 @@ public class SettingsServiceTests
     // ── ProviderAuth initialization ─────────────────────────────────────
 
     [Test]
-    public void ProviderAuth_Has11Providers()
+    public void ProviderAuth_Has4Providers()
     {
-        Assert.That(sut.ProviderAuth.Count, Is.EqualTo(11));
+        Assert.That(sut.ProviderAuth.Count, Is.EqualTo(4));
     }
 
     [TestCase("openai")]
     [TestCase("claude")]
     [TestCase("gemini")]
     [TestCase("deepseek")]
-    [TestCase("mistral")]
-    [TestCase("xai")]
-    [TestCase("groq")]
-    [TestCase("together")]
-    [TestCase("openrouter")]
-    [TestCase("fireworks")]
-    [TestCase("cohere")]
     public void ProviderAuth_ContainsExpectedProvider(string providerId)
     {
         Assert.That(sut.ProviderAuth.ContainsKey(providerId), Is.True);
@@ -144,15 +137,15 @@ public class SettingsServiceTests
     // ── Templates ───────────────────────────────────────────────────────
 
     [Test]
-    public void Templates_HasAtLeast11Templates()
+    public void Templates_HasAtLeast4Templates()
     {
-        Assert.That(sut.Templates.Count, Is.GreaterThanOrEqualTo(11));
+        Assert.That(sut.Templates.Count, Is.GreaterThanOrEqualTo(4));
     }
 
     [Test]
-    public void Templates_ContainsDefaultTemplates()
+    public void Templates_ContainsDefaultTemplatesForAllProviders()
     {
-        Assert.That(sut.Templates.Count(t => t.IsDefault), Is.GreaterThanOrEqualTo(11));
+        Assert.That(sut.Templates.Count(t => t.IsDefault), Is.GreaterThanOrEqualTo(4));
     }
 
     [Test]
@@ -166,7 +159,7 @@ public class SettingsServiceTests
     public void Templates_CoverAllProviders()
     {
         var providers = sut.Templates.Select(t => t.ProviderId).ToHashSet();
-        var expected = new[] { "openai", "claude", "gemini", "deepseek", "mistral", "xai", "groq", "together", "openrouter", "fireworks", "cohere" };
+        var expected = new[] { "openai", "claude", "gemini", "deepseek" };
         foreach (var p in expected)
             Assert.That(providers.Contains(p), Is.True, $"Missing template for provider: {p}");
     }
@@ -445,7 +438,7 @@ public class SettingsServiceTests
         // provider this app supports should be present in the shared store so sibling
         // MindAttic apps can see the same credentials.
         var shared = MindAtticCredentialStore.LoadAllRaw();
-        var standardProviders = new[] { "openai", "claude", "gemini", "deepseek", "mistral", "xai", "groq", "together", "openrouter", "fireworks", "cohere" };
+        var standardProviders = new[] { "openai", "claude", "gemini", "deepseek" };
 
         foreach (var providerId in standardProviders)
             Assert.That(shared.ContainsKey(providerId), Is.True, $"{providerId} missing from shared store");

@@ -142,13 +142,6 @@ public class ThinkTankSettingsService
         ProviderAuth["claude"] = new ProviderAuthConfig("claude", "{\n  \"type\": \"anthropic\",\n  \"apiKey\": \"\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"maxTokens\": 2048\n}");
         ProviderAuth["gemini"] = new ProviderAuthConfig("gemini", "{\n  \"type\": \"google\",\n  \"apiKey\": \"\",\n  \"model\": \"gemini-2.5-flash\",\n  \"maxTokens\": 2048\n}");
         ProviderAuth["deepseek"] = new ProviderAuthConfig("deepseek", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-chat\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["mistral"] = new ProviderAuthConfig("mistral", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"mistral-small-latest\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["xai"] = new ProviderAuthConfig("xai", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"grok-3-mini-fast\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["groq"] = new ProviderAuthConfig("groq", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"llama-4-scout-17b-16e-instruct\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["together"] = new ProviderAuthConfig("together", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/Llama-4-Scout-17B-16E-Instruct\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["openrouter"] = new ProviderAuthConfig("openrouter", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/llama-3.1-8b-instruct\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["fireworks"] = new ProviderAuthConfig("fireworks", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"accounts/fireworks/models/llama-v3p3-70b-instruct\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["cohere"] = new ProviderAuthConfig("cohere", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"command-a-03-2025\",\n  \"maxTokens\": 2048\n}");
 
         Templates.AddRange(CreateDefaultTemplates());
 
@@ -226,12 +219,16 @@ public class ThinkTankSettingsService
     private static List<ParticipantTemplate> CreateDefaultTemplates()
     {
         const string defaultPrefix = "default-";
+        var allowedProviders = LlmProviderCatalog.DefaultIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var result = new List<ParticipantTemplate>(PersonaLibrary.Defaults.Count);
         foreach (var persona in PersonaLibrary.Defaults)
         {
             var providerId = persona.Id.StartsWith(defaultPrefix, StringComparison.Ordinal)
                 ? persona.Id[defaultPrefix.Length..]
                 : persona.Id;
+
+            if (!allowedProviders.Contains(providerId))
+                continue;
 
             result.Add(new ParticipantTemplate(
                 TemplateId: $"legion-{persona.Id}",
@@ -297,14 +294,7 @@ public class ThinkTankSettingsService
                 ["openai"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}",
                 ["claude"] = "{\n  \"type\": \"anthropic\",\n  \"apiKey\": \"\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"maxTokens\": 2048\n}",
                 ["gemini"] = "{\n  \"type\": \"google\",\n  \"apiKey\": \"\",\n  \"model\": \"gemini-2.5-flash\",\n  \"maxTokens\": 2048\n}",
-                ["deepseek"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-chat\",\n  \"maxTokens\": 2048\n}",
-                ["mistral"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"mistral-small-latest\",\n  \"maxTokens\": 2048\n}",
-                ["xai"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"grok-3-mini-fast\",\n  \"maxTokens\": 2048\n}",
-                ["groq"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"llama-4-scout-17b-16e-instruct\",\n  \"maxTokens\": 2048\n}",
-                ["together"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/Llama-4-Scout-17B-16E-Instruct\",\n  \"maxTokens\": 2048\n}",
-                ["openrouter"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"meta-llama/llama-3.1-8b-instruct\",\n  \"maxTokens\": 2048\n}",
-                ["fireworks"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"accounts/fireworks/models/llama-v3p3-70b-instruct\",\n  \"maxTokens\": 2048\n}",
-                ["cohere"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"command-a-03-2025\",\n  \"maxTokens\": 2048\n}"
+                ["deepseek"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-chat\",\n  \"maxTokens\": 2048\n}"
             };
 
             foreach (var (providerId, defaultJson) in defaultAuths)
@@ -319,16 +309,34 @@ public class ThinkTankSettingsService
                 var cfg = ProviderAuth[providerId];
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(cfg.Json);
-                    if (!doc.RootElement.TryGetProperty("maxTokens", out _))
+                    var existing = System.Text.Json.Nodes.JsonNode.Parse(cfg.Json)?.AsObject();
+                    var defaultsJson = System.Text.Json.Nodes.JsonNode.Parse(defaultJson)?.AsObject();
+                    if (existing is null || defaultsJson is null)
+                        continue;
+
+                    var providerChanged = false;
+                    foreach (var prop in defaultsJson)
                     {
-                        var json = cfg.Json.TrimEnd().TrimEnd('}').TrimEnd();
-                        json += ",\n  \"maxTokens\": 2048\n}";
-                        ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
+                        if (existing.ContainsKey(prop.Key))
+                            continue;
+
+                        existing[prop.Key] = prop.Value?.DeepClone();
+                        providerChanged = true;
+                    }
+
+                    if (providerChanged)
+                    {
+                        ProviderAuth[providerId] = new ProviderAuthConfig(
+                            providerId,
+                            existing.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
                         changed = true;
                     }
                 }
-                catch { }
+                catch
+                {
+                    ProviderAuth[providerId] = new ProviderAuthConfig(providerId, defaultJson);
+                    changed = true;
+                }
             }
 
             if (changed)
@@ -360,26 +368,6 @@ public class ThinkTankSettingsService
             WriteIfMissing("DeepSeek.md",
                 "# DeepSeek\n\nYou are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max.\n");
 
-            WriteIfMissing("Mistral.md",
-                "# Mistral\n\nYou are Mistral, made by Mistral AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be sharp and efficient. 2-3 sentences max.\n");
-
-            WriteIfMissing("Grok.md",
-                "# Grok\n\nYou are Grok, made by xAI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be witty and bold. 2-3 sentences max.\n");
-
-            WriteIfMissing("Groq.md",
-                "# Groq\n\nYou are an AI running on Groq's ultra-fast inference engine. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be quick and insightful. 2-3 sentences max.\n");
-
-            WriteIfMissing("Together.md",
-                "# Together\n\nYou are an AI running on Together AI's platform. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be collaborative and thoughtful. 2-3 sentences max.\n");
-
-            WriteIfMissing("OpenRouter.md",
-                "# OpenRouter\n\nYou are an AI accessed through OpenRouter. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be versatile and engaging. 2-3 sentences max.\n");
-
-            WriteIfMissing("Fireworks.md",
-                "# Fireworks\n\nYou are an AI running on Fireworks AI. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be fast and perceptive. 2-3 sentences max.\n");
-
-            WriteIfMissing("Cohere.md",
-                "# Cohere\n\nYou are Command, made by Cohere. You are in a live roundtable with other AI systems. Read what they said and respond directly. Be grounded and clear. 2-3 sentences max.\n");
         }
         catch { }
 
