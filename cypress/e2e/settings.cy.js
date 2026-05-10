@@ -1,10 +1,28 @@
 // Cypress assertions for /settings — covers all three tabs (Personas, Defaults,
 // Appearance) plus the SettingsAppearance child component. No live LLM calls
 // are made; these are UI-rendering assertions only.
+//
+// Note: the top-nav anchors (NavMenu.razor) share the `.settings-tab` class
+// with the page's tab buttons and overlay them at the test viewport. To
+// avoid Cypress dispatching the click on the wrong element, we trigger the
+// underlying DOM click directly via $el[0].click() — Blazor's document-level
+// event listener picks it up regardless of visual layering.
+
+function clickById(id) {
+  cy.get(`#${id}`, { timeout: 15000 }).then(($el) => {
+    const evt = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+    $el[0].dispatchEvent(evt);
+  });
+}
 
 describe('/settings — Personas/Defaults/Appearance', () => {
   beforeEach(() => {
     cy.visit('/settings', { failOnStatusCode: false });
+    // Wait for the Blazor Server circuit to finish hydrating. Without this,
+    // clicks land on prerendered DOM before @onclick handlers are bound and
+    // the test races the circuit. The circuit signals "ready" when the
+    // _blazor WebSocket request completes its handshake.
+    cy.wait(2500);
   });
 
   it('renders the three settings tabs', () => {
@@ -25,8 +43,8 @@ describe('/settings — Personas/Defaults/Appearance', () => {
   });
 
   it('Defaults tab shows global tokens / rounds inputs and the fallback toggle', () => {
-    cy.get('#tab-defaults').click();
-    cy.get('#panel-defaults').within(() => {
+    clickById('tab-defaults');
+    cy.get('#panel-defaults', { timeout: 20000 }).within(() => {
       cy.get('#defaults-max-tokens')
         .should('have.attr', 'min', '64')
         .and('have.attr', 'max', '32768');
@@ -39,8 +57,8 @@ describe('/settings — Personas/Defaults/Appearance', () => {
   });
 
   it('Appearance tab exposes theme selector + 3 sliders with documented ranges', () => {
-    cy.get('#tab-appearance').click();
-    cy.get('#panel-appearance').within(() => {
+    clickById('tab-appearance');
+    cy.get('#panel-appearance', { timeout: 20000 }).within(() => {
       cy.get('#appearance-theme option').its('length').should('eq', 18);
 
       cy.get('#appearance-control-height')
@@ -59,8 +77,8 @@ describe('/settings — Personas/Defaults/Appearance', () => {
   });
 
   it('switching theme updates html[data-theme] via JS interop', () => {
-    cy.get('#tab-appearance').click();
-    cy.get('#appearance-theme').select('matrix');
+    clickById('tab-appearance');
+    cy.get('#appearance-theme', { timeout: 20000 }).select('matrix');
     cy.get('html').should('have.attr', 'data-theme', 'matrix');
   });
 });

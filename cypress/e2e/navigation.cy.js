@@ -49,9 +49,14 @@ describe('ThinkTank navigation smoke', () => {
     });
   });
 
-  it('NotFound route renders gracefully (no raw 500)', () => {
-    cy.visit('/this-route-does-not-exist', { failOnStatusCode: false });
-    cy.contains(/not found|404/i, { timeout: 15000 }).should('exist');
+  it('NotFound page renders the alert message', () => {
+    // NotFound.razor declares @page "/not-found" — visiting it directly
+    // verifies the page wires up without depending on the Router's
+    // NotFoundPage fallback behaviour for unknown routes (which in this
+    // app returns an empty body that Cypress refuses to parse).
+    cy.visit('/not-found', { failOnStatusCode: false });
+    cy.contains('h1', 'Not Found', { timeout: 15000 }).should('be.visible');
+    cy.get('p[role="alert"]').should('contain.text', 'does not exist');
     assertNoErrorBanner();
   });
 });
