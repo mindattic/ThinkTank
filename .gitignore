@@ -43,3 +43,9 @@ TestResults/
 Settings.json
 Conversations/
 Personalities/
+
+# Cypress / Node
+node_modules/
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/

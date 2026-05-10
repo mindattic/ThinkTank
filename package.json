@@ -1,0 +1,14 @@
+{
+  "name": "thinktank-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cypress headless UI suite for the ThinkTank Blazor Server app.",
+  "scripts": {
+    "e2e": "cypress run",
+    "e2e:open": "cypress open",
+    "e2e:nav": "cypress run --spec cypress/e2e/navigation.cy.js"
+  },
+  "devDependencies": {
+    "cypress": "^13.13.0"
+  }
+}

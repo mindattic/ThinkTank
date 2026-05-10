@@ -3,7 +3,7 @@ using MindAttic.Legion;
 
 namespace ThinkTank.Core.Services;
 
-public class VotingService(LLMVotingService llmVoting)
+public class VotingService(LlmVotingService llmVoting)
 {
     public Task<VotingResult> VoteAsync(
         IEnumerable<ChatParticipant> participants,
