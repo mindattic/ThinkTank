@@ -158,6 +158,32 @@ dotnet build -t:Run -f net10.0-windows10.0.19041.0
 4. Go to **Conversations** (Think Tank)
 5. Enter a topic, select participants, and click **Start**
 
+### Testing
+
+The project ships with two complementary test suites.
+
+**Unit / component tests** — NUnit + bUnit, 252 tests covering services, model parsing, and Razor component rendering:
+
+```bash
+dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj
+```
+
+**End-to-end UI tests** — Cypress, 14 specs across navigation, settings, and chat affordances. Run a dev server in one terminal, then the suite in another:
+
+```bash
+# Terminal 1 — start the Blazor app on http://localhost:5100
+dotnet run --project ThinkTank.Blazor --urls http://localhost:5100
+
+# Terminal 2 — install once, then run the suite
+npm install
+npx cypress run
+
+# Or open the interactive runner
+npx cypress open
+```
+
+Override `CYPRESS_BASE_URL` if the server is on a different host/port. The suite assumes a freshly seeded settings store and does not fire live LLM calls — LLM dispatch through MindAttic.Legion is covered by the unit suite.
+
 ---
 
 ## Configuration
