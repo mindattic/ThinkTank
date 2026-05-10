@@ -12,8 +12,10 @@ A .NET MAUI + Blazor desktop application that orchestrates multi-participant AI 
 - [Getting Started](#getting-started)
 - [Configuration](#configuration)
   - [Provider Auth](#provider-auth)
+  - [Cloud-Native Credentials (MindAttic.Vault)](#cloud-native-credentials-mindatticvault)
   - [Personalities](#personalities)
   - [Appearance](#appearance)
+  - [Voting](#voting)
 - [How It Works](#how-it-works)
   - [Conversation Flow](#conversation-flow)
   - [User Chat Injection](#user-chat-injection)
@@ -87,6 +89,13 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 - Real-time online/offline status indicators per provider
 - Built-in connectivity test sends a test message to verify API access
 - Debounced polling (10-second intervals)
+
+### Vote-Driven Decisions
+
+- **Call Vote** button polls every participant on a question to break circular arguments
+- Three vote types: consensus (Yes/No), free-form conclusion, or pick-a-direction (custom options)
+- Result is injected back into shared history so subsequent turns see the decision
+- Participants can self-trigger an auto-vote mid-response by emitting `[REQUEST_VOTE: question]`
 
 ### Perspective Tracking
 
@@ -162,13 +171,13 @@ dotnet build -t:Run -f net10.0-windows10.0.19041.0
 
 The project ships with two complementary test suites.
 
-**Unit / component tests** — NUnit + bUnit, 252 tests covering services, model parsing, and Razor component rendering:
+**Unit / component tests** — NUnit + bUnit, 278 tests covering services, model parsing, Razor component rendering, the cloud-credential overlay, and the `ChatParticipant`→`VoterProfile` mapping:
 
 ```bash
 dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj
 ```
 
-**End-to-end UI tests** — Cypress, 14 specs across navigation, settings, and chat affordances. Run a dev server in one terminal, then the suite in another:
+**End-to-end UI tests** — Cypress, 18 specs across navigation, settings, chat affordances, and the Call-Vote dialog. Run a dev server in one terminal, then the suite in another:
 
 ```bash
 # Terminal 1 — start the Blazor app on http://localhost:5100
@@ -217,6 +226,24 @@ Each provider's configuration is stored as a JSON object:
 | Gemini | gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash, gemini-2.0-flash-lite |
 | DeepSeek | deepseek-chat, deepseek-reasoner |
 
+### Cloud-Native Credentials (MindAttic.Vault)
+
+For deployments where API keys live outside `Settings.json` — Azure App Service Application Settings, Key Vault references, or shared dev user-secrets — Think Tank reads each provider's `apiKey` from `IConfiguration` at the path:
+
+```
+MindAttic:Vault:LLM:<providerId>:apiKey
+```
+
+Configuration sources are layered in `Program.cs` (later wins): `appsettings.json` → `%APPDATA%\MindAttic\LLM\providers.json` → project user-secrets → shared user-secrets (`mindattic-vault-shared`) → environment variables (App Service Application Settings + Key Vault refs).
+
+**Precedence within `GetKeyForProvider`:**
+
+1. Explicit per-call override (e.g. a participant's `AuthOverrideJson`).
+2. The on-disk `apiKey` in `Settings.json` if non-empty — explicit local edits win.
+3. The runtime override resolved from any of the configuration sources above.
+
+Cloud-resolved keys live in a runtime-only side map (`RuntimeApiKeyOverrides`) and are **never** written back to `Settings.json` or the shared `%APPDATA%\MindAttic\LLM\providers.json` store. A cloud deployment can therefore run with a completely empty disk projection.
+
 ### Personalities
 
 Personalities are markdown templates that define how each AI participant behaves in conversation. The personality markdown is sent as the system prompt to the provider's API.
@@ -237,6 +264,30 @@ All visual customization is in **Settings > Appearance**:
 | Control Height | 28-60px | 40px | Height of buttons, inputs, and interactive elements |
 | Gutter | 0-30px | 10px | Spacing between UI elements |
 | Border Radius | 0-24px | 10px | Roundness of corners |
+
+### Voting
+
+The **Call Vote** button (visible in the conversation header once a tab has 2+ participants and the conversation has started) polls every participant on a question and injects the aggregated decision back into the shared history so subsequent turns see it.
+
+**Vote types:**
+
+| Type | Question | Options | Quorum |
+|------|----------|---------|--------|
+| Consensus | "Have we reached consensus?" | Yes / No | Simple majority |
+| Free-form | "What is our conclusion?" | (open-ended) | Plurality |
+| Direction | "What direction next?" | Comma-separated user-supplied options | Simple majority |
+
+The result lands in the conversation as a synthetic turn formatted:
+
+```
+[VOTE] Question: <question>
+Decision: <consensus> (<percentage> agreement)
+Summary: <narrativeSummary>
+```
+
+**Auto-vote:** the system prompt for every participant ends with an instruction telling them they may emit `[REQUEST_VOTE: question]` anywhere in their response if they detect a stalemate. The marker is stripped from the visible response and triggers an immediate consensus vote on the requested question. Implementation lives in `Chat.razor` (search for `VoteRequestInstruction` and `RunParticipantVoteAsync`); regex coverage is in `VoteMarkerTests.cs`.
+
+The mapping from `ChatParticipant` to Legion's `VoterProfile` (preserving each participant's persona and per-participant API/model overrides) is implemented in `VotingService.MapToVoterProfiles`.
 
 ---
 
