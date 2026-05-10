@@ -1310,7 +1310,22 @@
 
     private record StatusEvent(DateTimeOffset Timestamp, string Text);
 
-    // ── Vote ──
+    // ── Vote ────────────────────────────────────────────────────────────
+    //
+    // Two entry points feed VotingService.VoteAsync:
+    //
+    //   • Manual: SubmitVoteAsync (Call Vote button → vote dialog).
+    //   • Auto:   RunParticipantVoteAsync, fired when a participant emits
+    //             [REQUEST_VOTE: question] in their response. The marker
+    //             regex lives at line ~930 and is also covered in
+    //             VoteMarkerTests.cs.
+    //
+    // The vote result is round-tripped back into the discussion as a
+    // synthetic SharedTurn with ModelId="vote" / ModelName="Vote Result"
+    // so the next participant sees the decision in their context window.
+    // The text format is "[VOTE] Question: …\nDecision: … (P0% agreement)\n
+    // Summary: …" — duplicated below in both entry points; if you change
+    // the format, change both places.
 
     private const string VoteRequestInstruction =
         "\n\n---\nIf this discussion is at a stalemate, include [REQUEST_VOTE: your question] anywhere in your response to trigger an immediate consensus vote among all participants.";
