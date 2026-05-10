@@ -61,7 +61,6 @@ public class ThinkTankService
         })
         .ToList();
 
-    private int? maxTokensOverride;
 
     /// <summary>
     /// Raised after every API call with the provider ID, a small synthesized
@@ -107,8 +106,6 @@ public class ThinkTankService
         List<SharedTurn> history,
         int? maxTokensOverride = null)
     {
-        this.maxTokensOverride = maxTokensOverride;
-
         // Claude fallback: route everyone through Anthropic with the original
         // provider's persona wrapped in a roleplay frame.
         var actualProviderId = providerId;
@@ -131,7 +128,7 @@ public class ThinkTankService
 
         var defaultModel = providerInfo.DefaultModel ?? "";
         var model        = GetModel(actualProviderId, actualAuthOverride, defaultModel);
-        var maxTokens    = GetMaxTokens(actualProviderId, actualAuthOverride);
+        var maxTokens    = GetMaxTokens(actualProviderId, actualAuthOverride, maxTokensOverride);
 
         var (systemPrompt, turns) = BuildPrompt(actualProviderId, providerId, actualPersona, topic, history);
 
@@ -227,10 +224,10 @@ public class ThinkTankService
         return defaultModel;
     }
 
-    private int GetMaxTokens(string providerId, string? authOverrideJson, int defaultMaxTokens = 2048)
+    private int GetMaxTokens(string providerId, string? authOverrideJson, int? maxTokensOverride = null, int defaultMaxTokens = 2048)
     {
-        if (this.maxTokensOverride.HasValue)
-            return this.maxTokensOverride.Value;
+        if (maxTokensOverride.HasValue)
+            return maxTokensOverride.Value;
 
         if (!string.IsNullOrWhiteSpace(authOverrideJson))
         {
