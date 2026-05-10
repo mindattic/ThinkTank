@@ -1,15 +1,13 @@
-using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using MindAttic.Vault.Configuration;
-using ThinkTank.Core.Models;
 
 namespace ThinkTank.Core.Services;
 
 /// <summary>
-/// Extension that layers <see cref="IConfiguration"/>-backed apiKey values on top of
-/// the in-memory <see cref="ThinkTankSettingsService.ProviderAuth"/> map. Sources walk
-/// in standard <c>IConfigurationBuilder</c> order — when called from <c>Program.cs</c>
-/// the chain is:
+/// Extension that records <see cref="IConfiguration"/>-backed apiKey values into
+/// <see cref="ThinkTankSettingsService.RuntimeApiKeyOverrides"/> — a process-lifetime side map
+/// consulted by <see cref="ThinkTankSettingsService.GetKeyForProvider"/>. Sources walk in
+/// standard <c>IConfigurationBuilder</c> order — when called from <c>Program.cs</c> the chain is:
 /// <list type="number">
 ///   <item><description>App Service Application Settings (incl. Key Vault references) via <c>AddEnvironmentVariables</c></description></item>
 ///   <item><description>Shared dev secrets at id <c>mindattic-vault-shared</c></description></item>
@@ -20,18 +18,19 @@ namespace ThinkTank.Core.Services;
 ///   <item><description><c>appsettings.json</c></description></item>
 /// </list>
 ///
-/// <para>The overlay updates each provider's auth JSON in-memory only — it does NOT call
-/// <see cref="ThinkTankSettingsService.SetAuthJson"/>, so the new apiKey values never
-/// land on disk. Production deployments keep their secrets in Application Settings or
-/// Key Vault; the local <c>Settings.json</c> stays free of cloud-resolved secrets.</para>
+/// <para>The overlay deliberately does NOT mutate <see cref="ThinkTankSettingsService.ProviderAuth"/>
+/// — that map is the on-disk projection serialized by every <see cref="ThinkTankSettingsService.Save"/>
+/// (and pushed to the shared store by <c>SyncLocalToSharedStore</c>). Routing cloud-resolved keys
+/// through the side map instead keeps secrets out of <c>Settings.json</c> and
+/// <c>%APPDATA%\MindAttic\LLM\providers.json</c>, even after later UI edits trigger a Save.</para>
 /// </summary>
 public static class SettingsServiceVaultOverlay
 {
     /// <summary>
-    /// For every providerId already in <see cref="ThinkTankSettingsService.ProviderAuth"/>,
-    /// if <c>MindAttic:Vault:LLM:&lt;providerId&gt;:apiKey</c> is set in <paramref name="config"/>,
-    /// rewrite that provider's auth JSON to use the configured value while preserving every
-    /// other field (<c>type</c>, <c>model</c>, <c>maxTokens</c>, ...).
+    /// For every providerId in <see cref="ThinkTankSettingsService.ProviderAuth"/>, if
+    /// <c>MindAttic:Vault:LLM:&lt;providerId&gt;:apiKey</c> is set in <paramref name="config"/>,
+    /// record the trimmed value into <see cref="ThinkTankSettingsService.RuntimeApiKeyOverrides"/>.
+    /// The on-disk JSON is left untouched.
     /// </summary>
     public static void OverlayFromConfiguration(this ThinkTankSettingsService self, IConfiguration config)
     {
@@ -46,54 +45,7 @@ public static class SettingsServiceVaultOverlay
             var key = bucket[$"{providerId}:{VaultConfigurationKeys.ApiKeyProperty}"];
             if (string.IsNullOrWhiteSpace(key)) continue;
 
-            var existingJson = self.ProviderAuth[providerId].Json;
-            var updatedJson  = ReplaceApiKey(existingJson, key.Trim());
-            self.ProviderAuth[providerId] = new ProviderAuthConfig(providerId, updatedJson);
+            self.RuntimeApiKeyOverrides[providerId] = key.Trim();
         }
-    }
-
-    /// <summary>
-    /// Returns a copy of <paramref name="existingJson"/> with its <c>apiKey</c> property
-    /// replaced by <paramref name="newApiKey"/>. Preserves every other field. Falls back
-    /// to a minimal <c>{ "apiKey": ... }</c> object if <paramref name="existingJson"/>
-    /// is unparseable.
-    /// </summary>
-    private static string ReplaceApiKey(string existingJson, string newApiKey)
-    {
-        var preserved = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-
-        if (!string.IsNullOrWhiteSpace(existingJson))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(existingJson);
-                if (doc.RootElement.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var prop in doc.RootElement.EnumerateObject())
-                    {
-                        if (string.Equals(prop.Name, "apiKey", StringComparison.Ordinal)) continue;
-                        preserved[prop.Name] = prop.Value.Clone();
-                    }
-                }
-            }
-            catch { /* fall through to minimal payload */ }
-        }
-
-        using var ms = new MemoryStream();
-        using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Indented = true }))
-        {
-            w.WriteStartObject();
-            // Preserve type first if present so the JSON ordering matches the existing convention.
-            if (preserved.TryGetValue("type", out var t)) { w.WritePropertyName("type"); t.WriteTo(w); }
-            w.WriteString("apiKey", newApiKey);
-            foreach (var (name, value) in preserved)
-            {
-                if (name is "type") continue;
-                w.WritePropertyName(name);
-                value.WriteTo(w);
-            }
-            w.WriteEndObject();
-        }
-        return System.Text.Encoding.UTF8.GetString(ms.ToArray());
     }
 }

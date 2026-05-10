@@ -36,6 +36,20 @@ public class ThinkTankSettingsService
     /// </summary>
     public Dictionary<string, ProviderAuthConfig> ProviderDefaults { get; } = new();
 
+    /// <summary>
+    /// Runtime-only apiKey overrides resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
+    /// (e.g. Azure Key Vault references via App Service Application Settings, or shared dev user-secrets).
+    /// Populated by <see cref="SettingsServiceVaultOverlay.OverlayFromConfiguration"/>.
+    /// <para>
+    /// Read-through only: <see cref="GetKeyForProvider"/> falls back to this map when the on-disk
+    /// auth JSON has no apiKey set. Never serialized, never written back to <see cref="ProviderAuth"/>,
+    /// so cloud-resolved secrets cannot leak into <c>Settings.json</c> or the shared
+    /// <c>%APPDATA%\MindAttic\LLM\providers.json</c> store via <see cref="Save"/>.
+    /// </para>
+    /// </summary>
+    public Dictionary<string, string> RuntimeApiKeyOverrides { get; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Reusable participant templates (both built-in defaults and user-created customs).</summary>
     public List<ParticipantTemplate> Templates { get; } = new();
 
@@ -557,19 +571,12 @@ public class ThinkTankSettingsService
     {
         if (count <= 0) return;
 
-        // Active providers = those with a non-empty apiKey in our local auth state.
-        var available = ProviderAuth
-            .Where(kv =>
-            {
-                try
-                {
-                    using var doc = System.Text.Json.JsonDocument.Parse(kv.Value.Json);
-                    return doc.RootElement.TryGetProperty("apiKey", out var k)
-                        && !string.IsNullOrWhiteSpace(k.GetString());
-                }
-                catch { return false; }
-            })
-            .Select(kv => kv.Key)
+        // Active providers = those with a non-empty apiKey resolvable via the standard
+        // precedence chain (disk auth JSON, then runtime / Vault overrides). Going through
+        // GetKeyForProvider ensures cloud-only providers (key in Vault, empty on disk)
+        // still register as active.
+        var available = ProviderAuth.Keys
+            .Where(id => !string.IsNullOrWhiteSpace(GetKeyForProvider(id, null)))
             .ToList();
 
         var voters = VoterFactory.GenerateUniqueVoters(count, available, fallbackProviderId, rng);
@@ -589,8 +596,12 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Resolves the API key for a provider. Returns the override if provided,
-    /// otherwise extracts the <c>apiKey</c> field from the provider's auth JSON.
+    /// Resolves the API key for a provider. Precedence: explicit per-call override,
+    /// then the on-disk auth JSON's <c>apiKey</c> field (if non-empty), then any
+    /// runtime override resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
+    /// via <see cref="RuntimeApiKeyOverrides"/>. The runtime fallback lets cloud-deployed
+    /// instances run without any apiKey on disk while still allowing a developer's local
+    /// key to win when explicitly set.
     /// </summary>
     public string GetKeyForProvider(string providerId, string? apiKeyOverride)
     {
@@ -601,9 +612,17 @@ public class ThinkTankSettingsService
         {
             using var doc = System.Text.Json.JsonDocument.Parse(GetAuthJson(providerId));
             if (doc.RootElement.TryGetProperty("apiKey", out var apiKey))
-                return apiKey.GetString() ?? "";
+            {
+                var diskKey = apiKey.GetString();
+                if (!string.IsNullOrWhiteSpace(diskKey))
+                    return diskKey;
+            }
         }
         catch { }
+
+        if (RuntimeApiKeyOverrides.TryGetValue(providerId, out var runtimeKey)
+            && !string.IsNullOrWhiteSpace(runtimeKey))
+            return runtimeKey;
 
         return "";
     }

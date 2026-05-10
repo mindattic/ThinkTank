@@ -3,7 +3,6 @@ using ThinkTank.Core.Services;
 using ThinkTank.Blazor.Components;
 using MindAttic.Legion;
 using MindAttic.Vault.Configuration;
-using MindAttic.Vault.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,9 +27,6 @@ builder.Services.AddSingleton<HttpClient>();
 // MindAttic.Legion is the gateway for all LLM communication. Register before
 // any service that calls into LLMs (ThinkTankService, VotingService).
 builder.Services.AddLegionClient();
-// Vault: cloud-native credential resolvers (LlmCredentialResolver, BrokerCredentialResolver)
-// available via DI for any service that wants to read from IConfiguration first.
-builder.Services.AddMindAtticVault(builder.Configuration);
 builder.Services.AddSingleton(sp =>
 {
     var settings = new SettingsService();
