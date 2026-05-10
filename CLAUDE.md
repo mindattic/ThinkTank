@@ -1,5 +1,8 @@
 # ThinkTank Project Rules
 
+## Conversation
+- A bare "do" / "do it" / "yes" from the user means "continue", "keep going", "proceed". Resume the current task without asking for clarification.
+
 ## Planned Feature: LLMVoting Integration
 
 Wire in the sibling `MindAttic.LLMVoting` library so participants can call for a vote mid-discussion to break circular arguments and reach a decision.

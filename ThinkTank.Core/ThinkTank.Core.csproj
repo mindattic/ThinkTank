@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="MindAttic.Vault" Version="0.2.0" />
         <ProjectReference Include="../../MindAttic.Legion/MindAttic.Legion/MindAttic.Legion.csproj" />
     </ItemGroup>
 

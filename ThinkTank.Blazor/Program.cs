@@ -2,8 +2,24 @@ using ThinkTank.Core.Models;
 using ThinkTank.Core.Services;
 using ThinkTank.Blazor.Components;
 using MindAttic.Legion;
+using MindAttic.Vault.Configuration;
+using MindAttic.Vault.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Cloud-native configuration chain. Layered so existing dev workflows keep working:
+//   - AddJsonFile (already added by WebApplicationBuilder for appsettings.json).
+//   - AddMindAtticVaultFiles surfaces %APPDATA%\MindAttic\LLM\providers.json on dev machines.
+//   - AddUserSecrets<Program>() reads the existing project-specific store (kept so
+//     the migrated ProviderDefaults:* keys keep flowing into the existing factory below).
+//   - AddUserSecrets("mindattic-vault-shared") layers the shared family store so a
+//     single `dotnet user-secrets --id mindattic-vault-shared set ...` populates every
+//     MindAttic project at once.
+//   - AddEnvironmentVariables (already present) picks up App Service Application Settings
+//     and Key Vault references in production.
+builder.Configuration
+    .AddMindAtticVaultFiles()
+    .AddUserSecrets("mindattic-vault-shared");
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -12,6 +28,9 @@ builder.Services.AddSingleton<HttpClient>();
 // MindAttic.Legion is the gateway for all LLM communication. Register before
 // any service that calls into LLMs (ThinkTankService, VotingService).
 builder.Services.AddLegionClient();
+// Vault: cloud-native credential resolvers (LlmCredentialResolver, BrokerCredentialResolver)
+// available via DI for any service that wants to read from IConfiguration first.
+builder.Services.AddMindAtticVault(builder.Configuration);
 builder.Services.AddSingleton(sp =>
 {
     var settings = new SettingsService();
@@ -29,6 +48,11 @@ builder.Services.AddSingleton(sp =>
             : $"{{\n  \"type\": \"{type}\",\n  \"apiKey\": \"{apiKey}\",\n  \"model\": \"{model}\",\n  \"maxTokens\": 2048\n}}";
         settings.ProviderDefaults[providerId] = new ProviderAuthConfig(providerId, json);
     }
+
+    // Layer Vault on top: any provider with MindAttic:Vault:LLM:<id>:apiKey set in
+    // IConfiguration (User Secrets / App Service / Key Vault) wins over the value
+    // loaded from disk, in-memory only — secrets are never written back to Settings.json.
+    settings.OverlayFromConfiguration(config);
 
     return settings;
 });
