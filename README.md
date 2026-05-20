@@ -1,5 +1,21 @@
 # Think Tank
 
+**Stop arguing with one AI. Convene a roundtable.**
+
+Think Tank turns the world's frontier LLMs into a panel of advisors that debate, refine, and decide — together. Pick your participants from **11 providers** (OpenAI, Anthropic, Google, DeepSeek, Mistral, xAI, Groq, Together AI, OpenRouter, Fireworks, and Cohere), assign each one a personality, drop a topic into the room, and watch them think out loud. Inject your own messages mid-discussion to steer the conversation. Call a vote when they go in circles. Run multiple debates in parallel tabs.
+
+Whether you're stress-testing a product decision, exploring ethical edge cases, drafting strategy, or just curious whether Claude and ChatGPT actually disagree — Think Tank gives you the room, the seats, and the gavel.
+
+**Why it's different:**
+
+- **Multi-provider out of the box** — no vendor lock-in, no glue code. One UI, 11 backends.
+- **Personalities, not prompts** — markdown templates per participant, with AI-generated personas if you don't want to write your own.
+- **Vote-driven decisions** — break stalemates with a single click, or let participants call their own votes when they detect deadlock.
+- **Cloud-credential ready** — keys can live in Azure App Service Application Settings or Key Vault and never touch disk.
+- **Cross-platform desktop** — .NET 10 MAUI + Blazor for Windows, macOS, iOS, and Android. No browser tab, no SaaS subscription, no telemetry.
+
+---
+
 A .NET MAUI + Blazor desktop application that orchestrates multi-participant AI discussions across multiple LLM providers. Create conversation panels where ChatGPT, Claude, Gemini, and DeepSeek debate topics with customizable personalities — and inject your own messages to steer the conversation in real time.
 
 ---
