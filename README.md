@@ -8,15 +8,15 @@ Whether you're stress-testing a product decision, exploring ethical edge cases, 
 
 **Why it's different:**
 
-- **Multi-provider out of the box** — no vendor lock-in, no glue code. One UI, 11 backends.
+- **Multi-provider out of the box** — no vendor lock-in, no glue code. One UI, 11 backends, every call routed through MindAttic.Legion.
 - **Personalities, not prompts** — markdown templates per participant, with AI-generated personas if you don't want to write your own.
 - **Vote-driven decisions** — break stalemates with a single click, or let participants call their own votes when they detect deadlock.
 - **Cloud-credential ready** — keys can live in Azure App Service Application Settings or Key Vault and never touch disk.
-- **Cross-platform desktop** — .NET 10 MAUI + Blazor for Windows, macOS, iOS, and Android. No browser tab, no SaaS subscription, no telemetry.
+- **Browser-native** — ASP.NET Core Blazor Server on .NET 10. No installer, no native binaries, no telemetry. Open it in a tab, share it on the LAN, or deploy it to Azure.
 
 ---
 
-A .NET MAUI + Blazor desktop application that orchestrates multi-participant AI discussions across multiple LLM providers. Create conversation panels where ChatGPT, Claude, Gemini, and DeepSeek debate topics with customizable personalities — and inject your own messages to steer the conversation in real time.
+A .NET 10 ASP.NET Core Blazor Server application that orchestrates multi-participant AI discussions across every major LLM provider. Create conversation panels where ChatGPT, Claude, Gemini, and DeepSeek debate topics with customizable personalities — and inject your own messages to steer the conversation in real time.
 
 ---
 
@@ -52,9 +52,11 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 
 **Built with:**
 
-- .NET 10 (MAUI + Blazor WebView)
-- Targets: Windows, Android, iOS, macOS (Catalyst)
-- No external UI framework beyond Bootstrap (included in wwwroot)
+- .NET 10 (ASP.NET Core Blazor Server, SignalR transport)
+- [MindAttic.Legion](../MindAttic.Legion/) for unified multi-provider LLM dispatch and voting
+- [MindAttic.Vault](../MindAttic.Vault/) for cloud-native credential resolution
+- Bootstrap (vendored in `ThinkTank.Shared/wwwroot/lib/`)
+- NUnit + bUnit for unit/component tests; Cypress for end-to-end UI tests
 
 ---
 
@@ -63,8 +65,8 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 ### Multi-Provider AI Conversations
 
 - **11 providers**: OpenAI, Anthropic, Google, DeepSeek, Mistral, xAI, Groq, Together AI, OpenRouter, Fireworks, and Cohere
-- Each participant calls its provider's API with full conversation history
-- Configurable model and max tokens per provider
+- Every participant call is routed through MindAttic.Legion — Think Tank itself never talks to a provider directly
+- Configurable model and max tokens per provider; per-participant overrides supported
 
 ### Conversation Tabs
 
@@ -72,7 +74,7 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 - Each tab has its own topic, participants, and message history
 - Typing indicator (animated dots) on tabs with active conversations
 - Right-click context menu for rename and close
-- Conversations persist across app restarts
+- Conversations persist across server restarts
 
 ### Personality System
 
@@ -112,6 +114,7 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 - Three vote types: consensus (Yes/No), free-form conclusion, or pick-a-direction (custom options)
 - Result is injected back into shared history so subsequent turns see the decision
 - Participants can self-trigger an auto-vote mid-response by emitting `[REQUEST_VOTE: question]`
+- Voting itself is delegated to MindAttic.Legion's `LLMVotingService`
 
 ### Perspective Tracking
 
@@ -130,29 +133,38 @@ Think Tank lets you pit multiple AI models against each other in structured conv
 ## Architecture
 
 ```
-+----------------------------------------------------------+
-|                    MAUI Shell (MainPage.xaml)             |
-|  +----------------------------------------------------+  |
-|  |              Blazor WebView                        |  |
-|  |  +----------+  +------------------------------+   |  |
-|  |  | NavMenu  |  |         Page Content          |   |  |
-|  |  | (top)    |  |  Home | Chat | Settings       |   |  |
-|  |  +----------+  +------------------------------+   |  |
-|  +----------------------------------------------------+  |
-+----------------------------------------------------------+
-         |                    |                  |
-    +----+-----+    +--------+--------+   +----+------+
-    | Settings |    |  ThinkTank   |   |Appearance |
-    | Service  |    |    Service       |   | Service   |
-    +----+-----+    +--------+--------+   +-----------+
-         |                   |
-    +----+-----+    +--------+----------------------------+
-    |Settings  |    |         HTTP Clients                |
-    |  .json   |    |  OpenAI | Claude | Gemini | DeepSeek|
-    +----------+    +-----------------------------------------+
++--------------------------------------------------------------+
+|                         Browser                              |
+|   Blazor Server components (Home / Chat / Settings / ...)    |
++------------------------------|-------------------------------+
+                               | SignalR (interactive server)
++------------------------------v-------------------------------+
+|                ThinkTank.Blazor (ASP.NET Core)               |
+|   Program.cs wires DI: Legion, Vault, services, voting       |
++------------------------------|-------------------------------+
+                               |
+        +----------------------+----------------------+
+        v                      v                      v
++---------------+    +-------------------+    +----------------+
+| ThinkTank.    |    | ThinkTank.Core    |    | ThinkTank.     |
+|   Shared      |    |   (services +     |    |   Blazor       |
+| (Razor lib +  |    |    models)        |    |   (host)       |
+|   wwwroot)    |    +---------+---------+    +----------------+
++---------------+              |
+                               v
+                  +--------------------------+
+                  |    MindAttic.Legion      |
+                  |   (LegionClient +        |
+                  |    LLMVotingService)     |
+                  +-------------+------------+
+                                |
+            +-------------------+-------------------+
+            v                   v                   v
+        OpenAI            Anthropic            ... 9 more
+       (ChatGPT)            (Claude)             providers
 ```
 
-All services are registered as singletons in `MauiProgram.cs` for shared global state.
+All services are registered as singletons in `ThinkTank.Blazor/Program.cs` for shared global state across user circuits.
 
 ---
 
@@ -160,8 +172,9 @@ All services are registered as singletons in `MauiProgram.cs` for shared global 
 
 ### Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) with MAUI workload
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - An API key for at least one supported provider
+- For local development, MindAttic.Legion and MindAttic.Vault must be available either as NuGet packages on `C:\LocalNuGet` (default) or installed from the public feed
 
 ### Build & Run
 
@@ -169,11 +182,14 @@ All services are registered as singletons in `MauiProgram.cs` for shared global 
 # Restore dependencies
 dotnet restore
 
-# Run on Windows
-dotnet build -t:Run -f net10.0-windows10.0.19041.0
+# Run the Blazor Server app (default URL: https://localhost:5001)
+dotnet run --project ThinkTank.Blazor
 
-# Or use Visual Studio / VS Code with MAUI extension
+# Or specify a port
+dotnet run --project ThinkTank.Blazor --urls http://localhost:5100
 ```
+
+Open the URL in any modern browser. The app uses SignalR for interactive components, so a stable connection is required (it reconnects automatically on transient drops).
 
 ### First Launch
 
@@ -187,13 +203,13 @@ dotnet build -t:Run -f net10.0-windows10.0.19041.0
 
 The project ships with two complementary test suites.
 
-**Unit / component tests** — NUnit + bUnit, 278 tests covering services, model parsing, Razor component rendering, the cloud-credential overlay, and the `ChatParticipant`→`VoterProfile` mapping:
+**Unit / component tests** — NUnit + bUnit covering services, model parsing, Razor component rendering, the cloud-credential overlay, voting marker regexes, and the `ChatParticipant`→`VoterProfile` mapping:
 
 ```bash
 dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj
 ```
 
-**End-to-end UI tests** — Cypress, 18 specs across navigation, settings, chat affordances, and the Call-Vote dialog. Run a dev server in one terminal, then the suite in another:
+**End-to-end UI tests** — Cypress, 4 specs (`navigation`, `settings`, `chat`, `vote-dialog`) covering top-level affordances. Run a dev server in one terminal, then the suite in another:
 
 ```bash
 # Terminal 1 — start the Blazor app on http://localhost:5100
@@ -233,14 +249,7 @@ Each provider's configuration is stored as a JSON object:
 | `model` | Model identifier to use for API calls |
 | `maxTokens` | Maximum output tokens per response (default: 2048) |
 
-**Known Models** (selectable via chip buttons in Settings):
-
-| Provider | Models |
-|----------|--------|
-| OpenAI | gpt-4, gpt-5, gpt-5-mini, gpt-5-nano |
-| Claude | claude-sonnet-4, claude-sonnet-4-6 |
-| Gemini | gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash, gemini-2.0-flash-lite |
-| DeepSeek | deepseek-chat, deepseek-reasoner |
+Models surfaced as selectable chips in Settings are sourced from `MindAttic.Legion`'s `LlmProviderCatalog`. As Legion's catalog grows, the Think Tank UI picks up new providers and models automatically.
 
 ### Cloud-Native Credentials (MindAttic.Vault)
 
@@ -250,7 +259,7 @@ For deployments where API keys live outside `Settings.json` — Azure App Servic
 MindAttic:Vault:LLM:<providerId>:apiKey
 ```
 
-Configuration sources are layered in `Program.cs` (later wins): `appsettings.json` → `%APPDATA%\MindAttic\LLM\providers.json` → project user-secrets → shared user-secrets (`mindattic-vault-shared`) → environment variables (App Service Application Settings + Key Vault refs).
+Configuration sources are layered in `ThinkTank.Blazor/Program.cs` (later wins): `appsettings.json` → `%APPDATA%\MindAttic\LLM\providers.json` (via `AddMindAtticVaultFiles`) → project user-secrets → shared user-secrets (`mindattic-vault-shared`) → environment variables (App Service Application Settings + Key Vault refs).
 
 **Precedence within `GetKeyForProvider`:**
 
@@ -283,7 +292,7 @@ All visual customization is in **Settings > Appearance**:
 
 ### Voting
 
-The **Call Vote** button (visible in the conversation header once a tab has 2+ participants and the conversation has started) polls every participant on a question and injects the aggregated decision back into the shared history so subsequent turns see it.
+The **Call Vote** button (visible in the conversation header once a tab has 2+ participants and the conversation has started) polls every participant on a question and injects the aggregated decision back into the shared history so subsequent turns see it. The vote itself runs through `MindAttic.Legion.LLMVotingService`.
 
 **Vote types:**
 
@@ -329,7 +338,7 @@ User enters topic + selects participants + clicks Start
          v                                     |
    For each participant:                       |
     +-- Set as current speaker (typing dots)   |
-    +-- Call provider API with shared history   |
+    +-- Call LegionClient.SendAsync(...)        |
     +-- Add response to messages               |
     +-- Save to chat.json + perspective.md     |
     +-- Wait 400ms                             |
@@ -366,41 +375,55 @@ After the first round completes, the app generates a conversation title in the b
 
 ```
 ThinkTank/
-+-- Components/
-|   +-- Layout/
-|   |   +-- MainLayout.razor          # App shell (NavMenu + content)
-|   |   +-- MainLayout.razor.css
-|   |   +-- NavMenu.razor             # Top nav bar (Home, Conversations, Settings)
-|   |   +-- NavMenu.razor.css
-|   +-- Pages/
-|   |   +-- Home.razor                # Landing page
-|   |   +-- Chat.razor                # Main think tank UI (~930 lines)
-|   |   +-- Settings.razor            # Provider auth + personality editor (~640 lines)
-|   |   +-- SettingsAppearance.razor   # Theme & visual controls
-|   |   +-- NotFound.razor
-|   +-- Shared/
-|   |   +-- ConfirmationDialog.razor   # Reusable confirmation modal
-|   +-- Routes.razor
-|   +-- _Imports.razor
-+-- Services/
-|   +-- ThinkTankService.cs        # Core AI orchestration (~565 lines)
-|   +-- SettingsService.cs             # Persistence layer (~360 lines)
-|   +-- AppearanceService.cs           # Theme management
-|   +-- ChatConversationsService.cs    # Tab/conversation management
-|   +-- ChatLogService.cs              # Logging + chat storage
-|   +-- ProviderAuthConfig.cs          # Auth config record
-|   +-- HumanNameService.cs            # Random name generation
-|   +-- NameGeneratorService.cs        # AI-powered name generation
-+-- wwwroot/
-|   +-- app.css                        # Global styles + all 18 theme definitions
-|   +-- theme.js                       # JS interop for theme/control sizing
-|   +-- index.html                     # MAUI WebView host
-|   +-- lib/bootstrap/                 # Bootstrap CSS
-+-- Resources/                         # Icons, fonts, images, splash screens
-+-- App.xaml / App.xaml.cs             # MAUI app entry
-+-- MainPage.xaml                      # BlazorWebView host
-+-- MauiProgram.cs                     # DI registration
-+-- ThinkTank.csproj               # Project config (.NET 10, MAUI)
++-- ThinkTank.Blazor/                  # ASP.NET Core host
+|   +-- Components/
+|   |   +-- App.razor                  # Root component
+|   |   +-- Routes.razor
+|   |   +-- _Imports.razor
+|   +-- Program.cs                     # DI registration (Legion, Vault, services)
+|   +-- Properties/launchSettings.json
+|   +-- ThinkTank.Blazor.csproj        # Web SDK, net10.0
++-- ThinkTank.Shared/                  # Razor class library (UI)
+|   +-- Components/
+|   |   +-- Layout/
+|   |   |   +-- MainLayout.razor       # App shell (NavMenu + content)
+|   |   |   +-- NavMenu.razor          # Top nav bar (Home, Conversations, Settings)
+|   |   +-- Pages/
+|   |   |   +-- Home.razor             # Landing page
+|   |   |   +-- Chat.razor             # Main think tank UI
+|   |   |   +-- Settings.razor         # Provider auth + personality editor
+|   |   |   +-- SettingsAppearance.razor
+|   |   |   +-- NotFound.razor
+|   |   +-- Shared/
+|   |       +-- ConfirmationDialog.razor
+|   +-- wwwroot/                       # Global CSS, themes, JS interop, Bootstrap
+|   |   +-- app.css                    # All 18 theme definitions
+|   |   +-- theme.js                   # JS interop for theme/control sizing
+|   |   +-- lib/bootstrap/
+|   +-- ThinkTank.Shared.csproj        # Razor SDK, net10.0
++-- ThinkTank.Core/                    # Services + models (no UI)
+|   +-- Services/
+|   |   +-- ThinkTankService.cs        # Core AI orchestration via Legion
+|   |   +-- VotingService.cs           # ChatParticipant -> VoterProfile mapping
+|   |   +-- SettingsService.cs         # Persistence + provider auth
+|   |   +-- SettingsServiceVaultOverlay.cs
+|   |   +-- AppearanceService.cs       # Theme management
+|   |   +-- ChatConversationsService.cs
+|   |   +-- ChatLogService.cs
+|   |   +-- HumanNameService.cs        # Random name generation
+|   |   +-- NameGeneratorService.cs    # AI-powered name generation
+|   +-- Models/
+|   |   +-- ChatModels.cs
+|   |   +-- ChatLogModels.cs
+|   |   +-- LlmModels.cs
+|   |   +-- PersistenceModels.cs
+|   |   +-- ProviderAuthConfig.cs
+|   |   +-- AppearanceMode.cs
+|   +-- ThinkTank.Core.csproj          # References MindAttic.Legion + Vault
++-- ThinkTank.UnitTests/               # NUnit + bUnit
++-- cypress/                           # Cypress e2e specs
+|   +-- e2e/{chat,navigation,settings,vote-dialog}.cy.js
++-- ThinkTank.slnx
 ```
 
 ---
@@ -409,24 +432,19 @@ ThinkTank/
 
 ### ThinkTankService
 
-The core orchestration engine. Routes API calls to the correct provider based on participant configuration.
+The core orchestration engine. Every LLM call is delegated to `MindAttic.Legion.LegionClient`; Think Tank's job is to assemble the prompt and history in Legion's canonical shape.
 
 **Key responsibilities:**
-- Build conversation history in each provider's native message format
-- Call provider APIs with personality prompts, topic context, and shared history
+- Build conversation history per participant from the shared turn log
+- Apply each participant's personality markdown as the system prompt
 - Trim history to the last 8 turns (`MaxContextTurns`) to stay within context limits
 - Sanitize model output (strip self-referencing prefixes like "[ChatGPT]:")
-- Emit diagnostics events for API response logging
-- Support per-participant auth overrides (different API keys, models, or token limits)
+- Emit diagnostics events for API response logging (redacted)
+- Support per-participant auth overrides (different API keys, models, or token limits) via Legion's override hooks
 
-**Provider endpoints:**
+### VotingService
 
-| Provider | Endpoint |
-|----------|----------|
-| OpenAI | `https://api.openai.com/v1/chat/completions` |
-| Claude | `https://api.anthropic.com/v1/messages` |
-| Gemini | `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` |
-| DeepSeek | `https://api.deepseek.com/chat/completions` |
+Maps `ChatParticipant[]` (with per-participant API/model overrides) into Legion's `VoterProfile[]` and delegates to `LLMVotingService.VoteWithProfilesAsync`. Returns a `VoteResult` shaped for injection back into the shared conversation history.
 
 ### SettingsService
 
@@ -463,7 +481,7 @@ Manages the conversation tab system. Uses `ObservableCollection<ChatConversation
 
 ## Theming
 
-The app uses CSS custom properties (variables) defined per theme in `wwwroot/app.css`. Each theme is a `html[data-theme="..."]` selector block that overrides the root variables.
+The app uses CSS custom properties (variables) defined per theme in `ThinkTank.Shared/wwwroot/app.css`. Each theme is a `html[data-theme="..."]` selector block that overrides the root variables.
 
 ### Provider Colors
 
@@ -517,7 +535,7 @@ Each provider has a dedicated color used throughout the UI for avatars, message 
 
 ## Data Persistence
 
-All data is stored in the local application data directory:
+All data is stored in the local application data directory of the user running the host process:
 
 ```
 %LOCALAPPDATA%\MindAttic\ThinkTank\
@@ -529,6 +547,8 @@ All data is stored in the local application data directory:
         +-- chat.json          # Append-only event log
         +-- {participantId}.md # Perspective files
 ```
+
+When deployed to Azure App Service, `%LOCALAPPDATA%` maps under the App Service home directory (typically `D:\local\LocalAppData\MindAttic\ThinkTank\`). API keys should be promoted out of `Settings.json` and into Application Settings + Key Vault via the [Vault overlay](#cloud-native-credentials-mindatticvault).
 
 ### Settings.json Structure
 
@@ -576,41 +596,31 @@ The app uses JS interop for DOM operations that Blazor can't handle natively:
 | `setControlHeight(px)` | theme.js | Updates `--control-height` CSS variable |
 | `setGutter(px)` | theme.js | Updates `--gutter` CSS variable |
 | `setBorderRadius(px)` | theme.js | Updates `--radius` CSS variable |
-| `isNearBottom(el, threshold)` | index.html | Checks if element is scrolled near bottom |
-| `scrollToBottom(el)` | index.html | Scrolls element to bottom |
-| `blurActive()` | index.html | Blurs the currently focused element |
+| `isNearBottom(el, threshold)` | App.razor | Checks if element is scrolled near bottom |
+| `scrollToBottom(el)` | App.razor | Scrolls element to bottom |
+| `blurActive()` | App.razor | Blurs the currently focused element |
 
 ---
 
 ## Supported Providers
 
-### OpenAI (ChatGPT)
+Every LLM call leaves Think Tank through `MindAttic.Legion.LegionClient` — Think Tank itself does not hold a single HTTP endpoint. Provider HTTP details (URLs, auth headers, request shape, retries, timeouts) all live in Legion's `LlmProviderCatalog` and per-provider clients.
 
-- **Auth**: Bearer token
-- **API**: Chat Completions (`/v1/chat/completions`)
-- **Default model**: gpt-4o
-- **Message format**: OpenAI chat messages (system/user/assistant roles)
+| Provider | Auth | Default Model |
+|----------|------|---------------|
+| Claude (Anthropic) | `x-api-key` header | `claude-sonnet-4-6` |
+| ChatGPT (OpenAI) | Bearer token | `gpt-4.1-mini` |
+| Gemini (Google) | API key (query parameter) | `gemini-2.5-flash` |
+| DeepSeek | Bearer token (OpenAI-compatible) | `deepseek-chat` |
+| Mistral | Bearer token | `mistral-large-latest` |
+| Grok (xAI) | Bearer token (OpenAI-compatible) | `grok-3-mini-fast` |
+| Groq | Bearer token (OpenAI-compatible) | `llama-3.3-70b-versatile` |
+| Together AI | Bearer token | `meta-llama/Llama-3-70b-chat-hf` |
+| OpenRouter | Bearer token | `meta-llama/llama-3.1-8b-instruct:free` |
+| Fireworks | Bearer token | `accounts/fireworks/models/llama-v3p1-70b-instruct` |
+| Cohere | Bearer token | `command-r-plus` |
 
-### Anthropic (Claude)
-
-- **Auth**: `x-api-key` header + `anthropic-version` header
-- **API**: Messages (`/v1/messages`)
-- **Default model**: claude-sonnet-4-6
-- **Message format**: Anthropic messages with separate system prompt
-
-### Google (Gemini)
-
-- **Auth**: API key in URL query parameter
-- **API**: GenerateContent (`/v1beta/models/{model}:generateContent`)
-- **Default model**: gemini-2.0-flash-lite
-- **Message format**: Google AI content parts with system instruction
-
-### DeepSeek
-
-- **Auth**: Bearer token
-- **API**: Chat Completions (`/chat/completions`) — OpenAI-compatible
-- **Default model**: deepseek-chat
-- **Message format**: OpenAI-compatible chat messages
+By default, the UI surfaces the first-party set (`claude`, `openai`, `gemini`, `deepseek`); the remaining seven are opt-in by adding an entry in **Settings > Providers**.
 
 ---
 
@@ -618,4 +628,5 @@ The app uses JS interop for DOM operations that Blazor can't handle natively:
 
 - **Do not commit API keys.** Provider auth JSON is stored in Local AppData and should remain local.
 - API responses in the Diagnostics panel are redacted (content replaced with "...") to prevent accidental exposure.
-- All provider traffic uses HTTPS.
+- All provider traffic uses HTTPS, end-to-end via Legion.
+- When hosting Think Tank on a network (LAN, Azure, etc.), serve only over TLS and gate access — Blazor Server's circuit holds a live SignalR connection and any reachable client can browse to the URL.
