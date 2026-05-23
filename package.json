@@ -6,7 +6,13 @@
   "scripts": {
     "e2e": "cypress run",
     "e2e:open": "cypress open",
-    "e2e:nav": "cypress run --spec cypress/e2e/navigation.cy.js"
+    "e2e:nav": "cypress run --spec cypress/e2e/navigation.cy.js",
+    "build": "node scripts/cli/build-html.js",
+    "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cli/deploy.ps1"
+  },
+  "dependencies": {
+    "highlight.js": "^11.9.0",
+    "marked": "^4.3.0"
   },
   "devDependencies": {
     "cypress": "^13.13.0"
