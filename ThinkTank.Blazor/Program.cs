@@ -23,9 +23,10 @@ builder.Configuration
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddSingleton<HttpClient>();
 // MindAttic.Legion is the gateway for all LLM communication. Register before
-// any service that calls into LLMs (ThinkTankService, VotingService).
+// any service that calls into LLMs (ThinkTankService, VotingService). Legion
+// owns its own IHttpClientFactory registration internally, so no app-level
+// HttpClient singleton is needed.
 builder.Services.AddLegionClient();
 builder.Services.AddSingleton(sp =>
 {
@@ -39,9 +40,11 @@ builder.Services.AddSingleton(sp =>
         var apiKey = provider["apiKey"] ?? "";
         var model = provider["model"] ?? "";
         var type = providerId is "claude" ? "anthropic" : providerId is "gemini" ? "google" : "bearer";
-        var json = string.IsNullOrWhiteSpace(model)
-            ? $"{{\n  \"type\": \"{type}\",\n  \"apiKey\": \"{apiKey}\",\n  \"maxTokens\": 2048\n}}"
-            : $"{{\n  \"type\": \"{type}\",\n  \"apiKey\": \"{apiKey}\",\n  \"model\": \"{model}\",\n  \"maxTokens\": 2048\n}}";
+        var json = ThinkTankSettingsService.BuildAuthJson(
+            type,
+            apiKey,
+            string.IsNullOrWhiteSpace(model) ? null : model,
+            maxTokens: 2048);
         settings.ProviderDefaults[providerId] = new ProviderAuthConfig(providerId, json);
     }
 
@@ -59,30 +62,13 @@ builder.Services.AddSingleton<ChatConversationsService>();
 builder.Services.AddSingleton<HumanNameService>();
 builder.Services.AddSingleton<NameGeneratorService>();
 builder.Services.AddSingleton<ThinkTankService>();
-builder.Services.AddLLMVoting(sp =>
+// VotingConfiguration is a long-lived singleton; VotingService.RefreshVotingConfigFromSettings
+// repopulates ApiKeys/ModelOverrides from SettingsService before every vote, so keys added or
+// rotated via the Settings UI after startup are visible at call time. The DI factory only
+// supplies the static AllowedProviderIds whitelist.
+builder.Services.AddLLMVoting(sp => new VotingConfiguration
 {
-    var settings = sp.GetRequiredService<SettingsService>();
-    var apiKeys = new Dictionary<string, string>();
-    var modelOverrides = new Dictionary<string, string>();
-    foreach (var (id, _) in settings.ProviderAuth)
-    {
-        var key = settings.GetKeyForProvider(id, null);
-        if (!string.IsNullOrWhiteSpace(key))
-            apiKeys[id] = key;
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(settings.GetAuthJson(id));
-            if (doc.RootElement.TryGetProperty("model", out var m) && m.GetString() is { Length: > 0 } model)
-                modelOverrides[id] = model;
-        }
-        catch { }
-    }
-    return new VotingConfiguration
-    {
-        ApiKeys = apiKeys,
-        ModelOverrides = modelOverrides,
-        AllowedProviderIds = LlmProviderCatalog.DefaultIds.ToHashSet(StringComparer.OrdinalIgnoreCase)
-    };
+    AllowedProviderIds = LlmProviderCatalog.DefaultIds.ToHashSet(StringComparer.OrdinalIgnoreCase)
 });
 builder.Services.AddSingleton<VotingService>();
 

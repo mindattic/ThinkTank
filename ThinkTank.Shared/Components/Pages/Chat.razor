@@ -545,7 +545,7 @@
         }
 
         if (_activeStatusTab == StatusTab.Context)
-            _ = RefreshContextFiles();
+            _ = ObserveFault(RefreshContextFiles(), "RefreshContextFiles");
     }
 
     private ChatConversation? Active => Conversations.ActiveConversation;
@@ -565,9 +565,42 @@
         Conversations.Changed += OnConversationsChanged;
         ThinkTankService.Diagnostics += OnDiagnostics;
         RestoreFromConversationState();
-        _ = RestoreAllAsync();
+        _ = ObserveFault(RestoreAllAsync(), "RestoreAllAsync");
         if (Conversations.Conversations.Count == 0)
             NewTab();
+    }
+
+    /// <summary>
+    /// Attaches a fault continuation so a fire-and-forget Task surfaces failures
+    /// into the active conversation's diagnostics list and the chat log, rather
+    /// than vanishing silently. Returns the task so callers can still discard it.
+    /// </summary>
+    private Task ObserveFault(Task task, string label)
+    {
+        _ = task.ContinueWith(t =>
+        {
+            if (!t.IsFaulted || t.Exception is null)
+                return;
+
+            var msg = t.Exception.GetBaseException().Message;
+            _ = InvokeAsync(() =>
+            {
+                var ts = DateTimeOffset.UtcNow;
+                var text = $"{label} failed: {msg}";
+                if (Active is not null)
+                {
+                    Active.Diagnostics.Add(new PersistedStatusEvent(ts, text));
+                    ActiveState.Diagnostics.Add(new StatusEvent(ts, text));
+                    Conversations.NotifyChanged();
+                }
+                else
+                {
+                    Console.Error.WriteLine($"[ThinkTank.Chat] {text}");
+                }
+                StateHasChanged();
+            });
+        }, TaskScheduler.Default);
+        return task;
     }
 
     private void OnDiagnostics(string providerId, string raw, bool isError)
@@ -606,7 +639,7 @@
 
             // Auto-refresh context tab when new messages arrive
             if (_activeStatusTab == StatusTab.Context)
-                _ = RefreshContextFiles();
+                _ = ObserveFault(RefreshContextFiles(), "RefreshContextFiles");
         }
     }
 
@@ -874,7 +907,35 @@
         Conversations.NotifyChanged();
         await ChatStorage.AppendChatJsonAsync(Active.ChatId, new { type = "chat-start", chatId = Active.ChatId, topic = Active.Topic, ts = DateTimeOffset.UtcNow });
 
-        var round = isResume ? state.Messages.Max(m => m.Round) : 0;
+        // Resume logic: if the last round in the saved log didn't include every
+        // participant (e.g. the previous session was killed mid-round), finish
+        // that round first — only call participants who haven't spoken in it.
+        // If the last round was complete, advance to the next round normally.
+        var round = 0;
+        var resumeSkip = new HashSet<string>();
+        if (isResume)
+        {
+            var lastRound = state.Messages.Max(m => m.Round);
+            var spokenInLast = state.Messages
+                .Where(m => m.Round == lastRound
+                    && m.ParticipantId != "user"
+                    && m.ParticipantId != "vote"
+                    && m.ParticipantId != "system"
+                    && !m.IsError)
+                .Select(m => m.ParticipantId)
+                .ToHashSet();
+
+            var participantIds = Active.Participants.Select(p => p.ParticipantId).ToHashSet();
+            if (participantIds.IsSubsetOf(spokenInLast))
+            {
+                round = lastRound; // round++ at top will jump to lastRound + 1
+            }
+            else
+            {
+                round = lastRound - 1; // round++ at top will land back on lastRound
+                resumeSkip = spokenInLast;
+            }
+        }
         var titleGenerated = isResume;
         var maxRounds = Active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10;
         while (!state.StopRequested)
@@ -892,6 +953,9 @@
             {
                 if (state.StopRequested)
                     break;
+
+                if (resumeSkip.Contains(p.ParticipantId))
+                    continue;
 
                 while ((_userChatFocused || state.VotePending) && !state.StopRequested)
                     await Task.Delay(50);
@@ -997,11 +1061,16 @@
                 await Task.Delay(400);
             }
 
+            // Only the first round after resume can have skip entries — clear so
+            // every participant speaks in every subsequent round.
+            if (resumeSkip.Count > 0)
+                resumeSkip = new HashSet<string>();
+
             // After the first round, generate a chat title in the background
             if (round == 1 && !titleGenerated)
             {
                 titleGenerated = true;
-                _ = GenerateChatTitleAsync(Active, state);
+                _ = ObserveFault(GenerateChatTitleAsync(Active, state), "GenerateChatTitleAsync");
             }
         }
 

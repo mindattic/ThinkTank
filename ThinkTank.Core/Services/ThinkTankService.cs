@@ -83,7 +83,10 @@ public class ThinkTankService
             }, new JsonSerializerOptions { WriteIndented = true });
             Diagnostics?.Invoke(providerId, payload, isError);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Diagnostics] emit failed for '{providerId}': {ex.Message}");
+        }
     }
 
     // ── Main dispatch ────────────────────────────────────────────────────────
@@ -130,7 +133,11 @@ public class ThinkTankService
         var model        = GetModel(actualProviderId, actualAuthOverride, defaultModel);
         var maxTokens    = GetMaxTokens(actualProviderId, actualAuthOverride, maxTokensOverride);
 
-        var (systemPrompt, turns) = BuildPrompt(actualProviderId, providerId, actualPersona, topic, history);
+        var maxContextTurns = ResolveMaxContextTurns();
+        if (history.Count > maxContextTurns)
+            EmitDiagnostics(providerId, model, $"context truncated: {history.Count} turns → {maxContextTurns}", isError: false);
+
+        var (systemPrompt, turns) = BuildPrompt(actualProviderId, providerId, actualPersona, topic, history, maxContextTurns);
 
         try
         {
@@ -189,7 +196,12 @@ public class ThinkTankService
                 if (doc.RootElement.TryGetProperty("apiKey", out var apiKey))
                     return apiKey.GetString() ?? "";
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Malformed per-template override silently falling back to the global key
+                // used to hide real misconfig — emit a diagnostic so the user sees it.
+                EmitDiagnostics(providerId, model: "", text: $"malformed auth override (apiKey lookup): {ex.Message}", isError: true, errorMessage: ex.Message);
+            }
         }
         return settings.GetKeyForProvider(providerId, null);
     }
@@ -207,7 +219,10 @@ public class ThinkTankService
                     if (!string.IsNullOrWhiteSpace(v)) return v;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                EmitDiagnostics(providerId, model: "", text: $"malformed auth override (model lookup): {ex.Message}", isError: true, errorMessage: ex.Message);
+            }
         }
 
         try
@@ -219,7 +234,10 @@ public class ThinkTankService
                 if (!string.IsNullOrWhiteSpace(v)) return v;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            EmitDiagnostics(providerId, model: "", text: $"malformed disk auth (model lookup): {ex.Message}", isError: true, errorMessage: ex.Message);
+        }
 
         return defaultModel;
     }
@@ -237,7 +255,10 @@ public class ThinkTankService
                 if (doc.RootElement.TryGetProperty("maxTokens", out var mt) && mt.ValueKind == JsonValueKind.Number)
                     return mt.GetInt32();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                EmitDiagnostics(providerId, model: "", text: $"malformed auth override (maxTokens lookup): {ex.Message}", isError: true, errorMessage: ex.Message);
+            }
         }
 
         try
@@ -246,19 +267,28 @@ public class ThinkTankService
             if (doc.RootElement.TryGetProperty("maxTokens", out var mt) && mt.ValueKind == JsonValueKind.Number)
                 return mt.GetInt32();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            EmitDiagnostics(providerId, model: "", text: $"malformed disk auth (maxTokens lookup): {ex.Message}", isError: true, errorMessage: ex.Message);
+        }
 
         return defaultMaxTokens;
     }
 
     // ── History → ChatTurn[] conversion ─────────────────────────────────────
 
-    private const int MaxContextTurns = 8;
+    private const int DefaultMaxContextTurns = 8;
 
-    private static List<SharedTurn> TrimHistory(List<SharedTurn> history)
-        => history.Count <= MaxContextTurns
+    private int ResolveMaxContextTurns()
+    {
+        var configured = settings.GlobalMaxContextTurns ?? DefaultMaxContextTurns;
+        return configured < 2 ? 2 : configured;
+    }
+
+    private static List<SharedTurn> TrimHistory(List<SharedTurn> history, int maxContextTurns)
+        => history.Count <= maxContextTurns
             ? history
-            : history.Skip(history.Count - MaxContextTurns).ToList();
+            : history.Skip(history.Count - maxContextTurns).ToList();
 
     /// <summary>
     /// Builds the system prompt + multi-turn history for a participant. The
@@ -274,13 +304,14 @@ public class ThinkTankService
         string speakerProviderId,
         string personalityMarkdown,
         string topic,
-        List<SharedTurn> history)
+        List<SharedTurn> history,
+        int maxContextTurns)
     {
         var personality = string.IsNullOrWhiteSpace(personalityMarkdown)
             ? DefaultRoundtableFraming
             : personalityMarkdown;
         var systemPrompt = $"{personality}\n\nTopic: \"{topic}\"";
-        var recent = TrimHistory(history);
+        var recent = TrimHistory(history, maxContextTurns);
         var turns = new List<ChatTurn>();
 
         if (recent.Count == 0)

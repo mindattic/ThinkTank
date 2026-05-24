@@ -58,6 +58,12 @@ public class ThinkTankSettingsService
 
     private const string SettingsFileName = "Settings.json";
 
+    /// <summary>
+    /// Guards every <see cref="Save"/> invocation so concurrent mutations (Blazor circuits,
+    /// OAuth callbacks, chat persistence) can't interleave their writes and corrupt Settings.json.
+    /// </summary>
+    private readonly object _saveLock = new();
+
     /// <summary>Current UI theme name (e.g., "dark", "neon", "dracula").</summary>
     public string? AppearanceTheme { get; private set; } = "dark";
 
@@ -75,6 +81,14 @@ public class ThinkTankSettingsService
 
     /// <summary>Global default max rounds per conversation. Conversations inherit this unless overridden.</summary>
     public int? GlobalMaxRounds { get; private set; } = 10;
+
+    /// <summary>
+    /// Global limit on how many prior <see cref="MindAttic.Legion.SharedTurn"/> entries
+    /// are passed to each participant. Older turns are dropped from the prompt;
+    /// <see cref="ThinkTankService"/> emits a diagnostic when truncation kicks in so the
+    /// user knows context was clipped.
+    /// </summary>
+    public int? GlobalMaxContextTurns { get; private set; } = 8;
 
     /// <summary>
     /// When <c>true</c>, every non-Claude participant routes through the Anthropic API, with the
@@ -117,7 +131,10 @@ public class ThinkTankSettingsService
             if (!Directory.Exists(oldRoot)) return;
             Directory.Move(oldRoot, newRoot);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Settings] legacy folder migration failed: {ex.Message}");
+        }
     }
 
     private static string PersonalitiesRoot
@@ -187,7 +204,10 @@ public class ThinkTankSettingsService
                     MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Settings] SyncLocalToSharedStore failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -220,7 +240,10 @@ public class ThinkTankSettingsService
                     ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Settings] OverlaySharedCredentials failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -356,7 +379,10 @@ public class ThinkTankSettingsService
             if (changed)
                 Save();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Settings] EnsureDefaultsIfMissing failed: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -383,7 +409,10 @@ public class ThinkTankSettingsService
                 "# DeepSeek\n\nYou are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max.\n");
 
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Settings] EnsurePersonalityFiles failed: {ex.Message}");
+        }
 
         void WriteIfMissing(string fileName, string markdown)
         {
@@ -427,11 +456,13 @@ public class ThinkTankSettingsService
             BorderRadius = dto.BorderRadius ?? 10;
             GlobalMaxTokens = dto.GlobalMaxTokens ?? 2048;
             GlobalMaxRounds = dto.GlobalMaxRounds ?? 10;
+            GlobalMaxContextTurns = dto.GlobalMaxContextTurns ?? 8;
             ClaudeFallbackMode = dto.ClaudeFallbackMode ?? false;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"[ThinkTank.Settings] failed to load Settings.json (will reinitialize with defaults): {ex.Message}");
             return false;
         }
     }
@@ -439,34 +470,50 @@ public class ThinkTankSettingsService
     /// <summary>
     /// Serializes the complete application state to <c>Settings.json</c> on disk.
     /// Called after every mutation to ensure crash-safe persistence.
+    /// <para>
+    /// Holds <see cref="_saveLock"/> so concurrent writers can't interleave, and writes
+    /// to a sibling <c>.tmp</c> file before <see cref="File.Move(string, string, bool)"/>
+    /// so a crash mid-serialize cannot truncate <c>Settings.json</c> to zero bytes.
+    /// Failures are reported to stderr so they don't pass silently like the previous
+    /// blanket <c>catch { }</c>.
+    /// </para>
     /// </summary>
     private void Save()
     {
-        try
+        lock (_saveLock)
         {
-            var dto = new PersistedSettings
+            try
             {
-                ProviderAuth = ProviderAuth.ToDictionary(k => k.Key, v => (string?)v.Value.Json),
-                Templates = Templates,
-                Conversations = Conversations,
-                AppearanceTheme = AppearanceTheme,
-                ControlHeight = ControlHeight,
-                Gutter = Gutter,
-                BorderRadius = BorderRadius,
-                GlobalMaxTokens = GlobalMaxTokens,
-                GlobalMaxRounds = GlobalMaxRounds,
-                ClaudeFallbackMode = ClaudeFallbackMode
-            };
+                var dto = new PersistedSettings
+                {
+                    ProviderAuth = ProviderAuth.ToDictionary(k => k.Key, v => (string?)v.Value.Json),
+                    Templates = Templates,
+                    Conversations = Conversations,
+                    AppearanceTheme = AppearanceTheme,
+                    ControlHeight = ControlHeight,
+                    Gutter = Gutter,
+                    BorderRadius = BorderRadius,
+                    GlobalMaxTokens = GlobalMaxTokens,
+                    GlobalMaxRounds = GlobalMaxRounds,
+                    GlobalMaxContextTurns = GlobalMaxContextTurns,
+                    ClaudeFallbackMode = ClaudeFallbackMode
+                };
 
-            var json = System.Text.Json.JsonSerializer.Serialize(dto, new System.Text.Json.JsonSerializerOptions
+                var json = System.Text.Json.JsonSerializer.Serialize(dto, new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                Directory.CreateDirectory(SettingsRoot);
+                var tmpPath = SettingsPath + ".tmp";
+                File.WriteAllText(tmpPath, json);
+                File.Move(tmpPath, SettingsPath, overwrite: true);
+            }
+            catch (Exception ex)
             {
-                WriteIndented = true
-            });
-
-            Directory.CreateDirectory(SettingsRoot);
-            File.WriteAllText(SettingsPath, json);
+                Console.Error.WriteLine($"[ThinkTank.Settings] Save failed: {ex.Message}");
+            }
         }
-        catch { }
     }
 
     /// <summary>
@@ -526,6 +573,16 @@ public class ThinkTankSettingsService
     public void SetGlobalMaxRounds(int rounds)
     {
         GlobalMaxRounds = rounds;
+        Save();
+    }
+
+    /// <summary>
+    /// Sets how many recent turns to include in each participant's prompt and persists to disk.
+    /// Values below 2 are clamped to 2 since participants need at least one prior turn for context.
+    /// </summary>
+    public void SetGlobalMaxContextTurns(int turns)
+    {
+        GlobalMaxContextTurns = turns < 2 ? 2 : turns;
         Save();
     }
 
@@ -618,7 +675,10 @@ public class ThinkTankSettingsService
                     return diskKey;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Settings] malformed disk auth for '{providerId}' (apiKey lookup): {ex.Message}");
+        }
 
         if (RuntimeApiKeyOverrides.TryGetValue(providerId, out var runtimeKey)
             && !string.IsNullOrWhiteSpace(runtimeKey))
@@ -632,25 +692,45 @@ public class ThinkTankSettingsService
     /// </summary>
     public void SetKey(string providerId, string apiKey)
     {
+        string? type = null;
+        string? model = null;
+        int? maxTokens = null;
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(GetAuthJson(providerId));
-            var type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
-            var model = doc.RootElement.TryGetProperty("model", out var m) ? m.GetString() : null;
-            var maxTokens = doc.RootElement.TryGetProperty("maxTokens", out var mt) && mt.ValueKind == System.Text.Json.JsonValueKind.Number ? mt.GetInt32() : (int?)null;
-            if (string.IsNullOrWhiteSpace(type))
-                type = providerId is "claude" ? "anthropic" : providerId is "gemini" ? "google" : "bearer";
-
-            var maxTokensPart = maxTokens.HasValue ? $",\n  \"maxTokens\": {maxTokens.Value}" : "";
-            if (string.IsNullOrWhiteSpace(model))
-                SetAuthJson(providerId, $"{{\n  \"type\": \"{type}\",\n  \"apiKey\": \"{apiKey}\"{maxTokensPart}\n}}");
-            else
-                SetAuthJson(providerId, $"{{\n  \"type\": \"{type}\",\n  \"apiKey\": \"{apiKey}\",\n  \"model\": \"{model}\"{maxTokensPart}\n}}");
+            type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
+            model = doc.RootElement.TryGetProperty("model", out var m) ? m.GetString() : null;
+            if (doc.RootElement.TryGetProperty("maxTokens", out var mt) && mt.ValueKind == System.Text.Json.JsonValueKind.Number)
+                maxTokens = mt.GetInt32();
         }
-        catch
+        catch (Exception ex)
         {
-            SetAuthJson(providerId, $"{{\n  \"type\": \"{providerId}\",\n  \"apiKey\": \"{apiKey}\"\n}}");
+            Console.Error.WriteLine($"[ThinkTank.Settings] SetKey: failed to parse existing auth for '{providerId}': {ex.Message}");
         }
+
+        if (string.IsNullOrWhiteSpace(type))
+            type = providerId is "claude" ? "anthropic" : providerId is "gemini" ? "google" : "bearer";
+
+        SetAuthJson(providerId, BuildAuthJson(type!, apiKey, model, maxTokens));
+    }
+
+    /// <summary>
+    /// Builds an auth-config JSON object using <see cref="System.Text.Json.JsonSerializer"/>
+    /// so secrets containing quotes, backslashes, or newlines round-trip safely.
+    /// </summary>
+    public static string BuildAuthJson(string type, string apiKey, string? model, int? maxTokens)
+    {
+        var node = new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = type,
+            ["apiKey"] = apiKey,
+        };
+        if (!string.IsNullOrWhiteSpace(model))
+            node["model"] = model;
+        if (maxTokens.HasValue)
+            node["maxTokens"] = maxTokens.Value;
+
+        return node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
     }
 
     /// <summary>
@@ -683,6 +763,7 @@ public class ThinkTankSettingsService
         public int? BorderRadius { get; set; }
         public int? GlobalMaxTokens { get; set; }
         public int? GlobalMaxRounds { get; set; }
+        public int? GlobalMaxContextTurns { get; set; }
         public bool? ClaudeFallbackMode { get; set; }
     }
 }

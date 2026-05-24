@@ -40,6 +40,13 @@ public class ChatStorageTests
     }
 
     [Test]
+    public void GetChatJsonlPath_EndsWith_ChatJsonl()
+    {
+        var path = ChatStorage.GetChatJsonlPath("abc123");
+        Assert.That(path, Does.EndWith("chat.jsonl"));
+    }
+
+    [Test]
     public void GetChatJsonPath_InsideChatFolder()
     {
         var folder = ChatStorage.GetChatFolder("abc123");
@@ -61,7 +68,7 @@ public class ChatStorageTests
     {
         await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "turn", text = "hello" });
 
-        Assert.That(File.Exists(ChatStorage.GetChatJsonPath(testChatId)), Is.True);
+        Assert.That(File.Exists(ChatStorage.GetChatJsonlPath(testChatId)), Is.True);
     }
 
     [Test]
@@ -70,9 +77,11 @@ public class ChatStorageTests
         await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "turn", text = "first" });
         await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "turn", text = "second" });
 
-        var json = await File.ReadAllTextAsync(ChatStorage.GetChatJsonPath(testChatId));
-        Assert.That(json, Does.Contain("first"));
-        Assert.That(json, Does.Contain("second"));
+        var jsonl = await File.ReadAllTextAsync(ChatStorage.GetChatJsonlPath(testChatId));
+        Assert.That(jsonl, Does.Contain("first"));
+        Assert.That(jsonl, Does.Contain("second"));
+        // JSONL: one entry per line, so two appends ⇒ at least two newlines worth of content.
+        Assert.That(jsonl.Split('\n', StringSplitOptions.RemoveEmptyEntries), Has.Length.EqualTo(2));
     }
 
     // ── ReadPerspectiveAsync / WritePerspectiveAsync ────────────────────

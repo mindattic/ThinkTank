@@ -165,11 +165,11 @@ public class ThinkTankServiceTests
 
     // ── TrimHistory (private static, tested via reflection) ─────────────
 
-    private static List<SharedTurn> InvokeTrimHistory(List<SharedTurn> history)
+    private static List<SharedTurn> InvokeTrimHistory(List<SharedTurn> history, int maxContextTurns = 8)
     {
         var method = typeof(ThinkTankService)
             .GetMethod("TrimHistory", BindingFlags.NonPublic | BindingFlags.Static)!;
-        return (List<SharedTurn>)method.Invoke(null, new object[] { history })!;
+        return (List<SharedTurn>)method.Invoke(null, new object[] { history, maxContextTurns })!;
     }
 
     [Test]

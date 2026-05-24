@@ -95,9 +95,10 @@ public class ProviderAuthConfigParsingTests
 
         using var doc = System.Text.Json.JsonDocument.Parse(settings.GetAuthJson("openai"));
         Assert.That(doc.RootElement.GetProperty("apiKey").GetString(), Is.EqualTo("fresh"));
-        // Recovery path uses providerId as the type fallback (not "bearer") so
-        // the test matches the actual SetKey fallback in SettingsService.cs.
-        Assert.That(doc.RootElement.GetProperty("type").GetString(), Is.EqualTo("openai"));
+        // Recovery path infers the Legion auth type from the providerId, the same
+        // way SetKey_DefaultsTypeFromProviderId_WhenMissing does for a non-malformed
+        // payload that simply omits the `type` field.
+        Assert.That(doc.RootElement.GetProperty("type").GetString(), Is.EqualTo("bearer"));
     }
 
     [TestCase("claude",   "anthropic")]

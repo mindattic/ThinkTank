@@ -9,8 +9,15 @@ namespace ThinkTank.Core.Services;
 /// <see cref="LlmVotingService.VoteWithProfilesAsync"/>. Used by the "Call Vote"
 /// flow in <c>Chat.razor</c> and by the auto-vote path triggered by participants
 /// emitting <c>[REQUEST_VOTE: ...]</c> mid-discussion.
+/// <para>
+/// Before each call, refreshes the singleton <see cref="VotingConfiguration"/>'s
+/// <see cref="VotingConfiguration.ApiKeys"/> and <see cref="VotingConfiguration.ModelOverrides"/>
+/// from the live <see cref="ThinkTankSettingsService"/>. That way keys added/rotated via
+/// the Settings UI after startup are visible to the singleton vote-time, not just at
+/// DI construction.
+/// </para>
 /// </summary>
-public class VotingService(LlmVotingService llmVoting)
+public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService settings, VotingConfiguration votingConfig)
 {
     /// <summary>
     /// Polls every participant on <paramref name="question"/> using their existing
@@ -25,6 +32,8 @@ public class VotingService(LlmVotingService llmVoting)
         Quorum quorum,
         CancellationToken ct = default)
     {
+        RefreshVotingConfigFromSettings();
+
         var voters = MapToVoterProfiles(participants);
 
         var request = new VoteRequest
@@ -35,6 +44,37 @@ public class VotingService(LlmVotingService llmVoting)
         };
 
         return llmVoting.VoteWithProfilesAsync(request, quorum, voters, ct);
+    }
+
+    /// <summary>
+    /// Overwrites <see cref="VotingConfiguration.ApiKeys"/> and
+    /// <see cref="VotingConfiguration.ModelOverrides"/> with the values currently
+    /// known to <see cref="ThinkTankSettingsService"/>. The singleton instance is
+    /// also held by <c>LlmVotingProvider</c> and the <c>LegionClient</c> key-resolver
+    /// closure, so mutating it here propagates to both.
+    /// </summary>
+    private void RefreshVotingConfigFromSettings()
+    {
+        var apiKeys = new Dictionary<string, string>();
+        var modelOverrides = new Dictionary<string, string>();
+        foreach (var providerId in settings.ProviderAuth.Keys)
+        {
+            var key = settings.GetKeyForProvider(providerId, null);
+            if (!string.IsNullOrWhiteSpace(key))
+                apiKeys[providerId] = key;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(settings.GetAuthJson(providerId));
+                if (doc.RootElement.TryGetProperty("model", out var m) && m.GetString() is { Length: > 0 } model)
+                    modelOverrides[providerId] = model;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ThinkTank.Voting] failed to read model override for '{providerId}': {ex.Message}");
+            }
+        }
+        votingConfig.ApiKeys = apiKeys;
+        votingConfig.ModelOverrides = modelOverrides;
     }
 
     /// <summary>
@@ -62,6 +102,10 @@ public class VotingService(LlmVotingService llmVoting)
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             return doc.RootElement.TryGetProperty(field, out var el) ? el.GetString() : null;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[ThinkTank.Voting] malformed auth override (field '{field}'): {ex.Message}");
+            return null;
+        }
     }
 }
