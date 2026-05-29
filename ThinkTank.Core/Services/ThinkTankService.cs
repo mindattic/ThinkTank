@@ -107,7 +107,8 @@ public class ThinkTankService
         string? authOverrideJson,
         string topic,
         List<SharedTurn> history,
-        int? maxTokensOverride = null)
+        int? maxTokensOverride = null,
+        string? speakerId = null)
     {
         // Claude fallback: route everyone through Anthropic with the original
         // provider's persona wrapped in a roleplay frame.
@@ -137,7 +138,10 @@ public class ThinkTankService
         if (history.Count > maxContextTurns)
             EmitDiagnostics(providerId, model, $"context truncated: {history.Count} turns → {maxContextTurns}", isError: false);
 
-        var (systemPrompt, turns) = BuildPrompt(actualProviderId, providerId, actualPersona, topic, history, maxContextTurns);
+        // Self-recognition matches the speaker's roundtable identity against SharedTurn.ModelId.
+        // History turns are keyed by ParticipantId, so prefer the caller-supplied speakerId;
+        // fall back to providerId for legacy single-participant-per-provider callers.
+        var (systemPrompt, turns) = BuildPrompt(actualProviderId, speakerId ?? providerId, actualPersona, topic, history, maxContextTurns);
 
         try
         {

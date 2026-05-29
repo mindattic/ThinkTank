@@ -175,8 +175,10 @@ public static class ChatStorage
     }
 
     /// <summary>
-    /// Loads all conversation turns from the chat log, filtering for entries of type
-    /// "turn" and parsing participant IDs, text, round numbers, and error flags.
+    /// Loads all conversation turns from the chat log, replaying entries of type
+    /// "turn", "user", "vote", and "system" and parsing participant IDs, text, round
+    /// numbers, and error flags. Bookkeeping entries (chat-start, status, settings-test)
+    /// are skipped.
     /// Prefers the new <c>chat.jsonl</c> format; if only the legacy <c>chat.json</c>
     /// array exists, migrates it on the fly. Returns an empty list if neither exists.
     /// </summary>
@@ -209,7 +211,11 @@ public static class ChatStorage
                     continue;
                 }
 
-                if (!item.TryGetProperty("type", out var type) || type.GetString() != "turn")
+                // Replay participant turns plus the user/vote/system messages that are
+                // woven into the transcript. Anything else (chat-start, status, settings-test)
+                // is bookkeeping and stays out of the rebuilt message list.
+                if (!item.TryGetProperty("type", out var type)
+                    || type.GetString() is not ("turn" or "user" or "vote" or "system"))
                     continue;
 
                 var participantId = item.TryGetProperty("participantId", out var pid) ? pid.GetString() ?? "" : "";

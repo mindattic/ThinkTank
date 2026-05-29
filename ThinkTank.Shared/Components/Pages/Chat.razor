@@ -624,17 +624,22 @@
     {
         await base.OnAfterRenderAsync(firstRender);
 
+        // The messages container is only in the DOM once a run is active or messages exist.
+        // Touching _messagesDiv before then passes an unconfigured ElementReference to JS.
+        var messagesRendered = ActiveState.Running || ActiveState.Messages.Count > 0;
+
         if (_pendingScrollToBottom)
         {
             _pendingScrollToBottom = false;
-            await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
+            if (messagesRendered)
+                await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
         }
 
         var count = ActiveState.Messages.Count;
         if (count != _lastRenderedMessageCount)
         {
             _lastRenderedMessageCount = count;
-            if (_followConversation)
+            if (_followConversation && messagesRendered)
                 await JS.InvokeVoidAsync("ThinkTank.scrollToBottom", _messagesDiv);
 
             // Auto-refresh context tab when new messages arrive
@@ -822,6 +827,12 @@
 
     private void CloseTab(string chatId)
     {
+        // Signal any in-flight run loop for this conversation to stop before we drop its
+        // state — otherwise the loop keeps firing LLM calls and writing turns to a
+        // conversation the user already closed.
+        if (_states.TryGetValue(chatId, out var st))
+            st.StopRequested = true;
+
         Conversations.CloseConversation(chatId);
         _states.Remove(chatId);
     }
@@ -868,11 +879,16 @@
         if (Active is null)
             return;
 
+        // Capture the conversation this run belongs to. The run loop awaits between turns,
+        // during which the user can switch tabs (changing the Active property). Binding to a
+        // local keeps every append, participant read, and persistence call pinned to the
+        // conversation the user actually started — not whichever tab happens to be focused.
+        var active = Active;
         var state = ActiveState;
         state.Error = null;
 
-        if (string.IsNullOrWhiteSpace(Active.Topic)) { state.Error = "Please enter a discussion prompt."; return; }
-        if (Active.Participants.Count < 2) { state.Error = "Pick at least 2 participants."; return; }
+        if (string.IsNullOrWhiteSpace(active.Topic)) { state.Error = "Please enter a discussion prompt."; return; }
+        if (active.Participants.Count < 2) { state.Error = "Pick at least 2 participants."; return; }
 
         state.Running = true;
         state.StopRequested = false;
@@ -892,20 +908,20 @@
                 sharedHistory.Add(new SharedTurn
                 {
                     ModelId = m.ParticipantId,
-                    ModelName = m.ParticipantId == "user" ? "User" : (Active.Participants.FirstOrDefault(p => p.ParticipantId == m.ParticipantId)?.DisplayName ?? m.ParticipantId),
+                    ModelName = m.ParticipantId == "user" ? "User" : (active.Participants.FirstOrDefault(p => p.ParticipantId == m.ParticipantId)?.DisplayName ?? m.ParticipantId),
                     Text = m.Text,
                     Round = m.Round
                 });
             }
         }
 
-        if (_pendingUserTurns.Count > 0)
+        if (state.PendingUserTurns.Count > 0)
         {
-            sharedHistory.AddRange(_pendingUserTurns);
-            _pendingUserTurns.Clear();
+            sharedHistory.AddRange(state.PendingUserTurns);
+            state.PendingUserTurns.Clear();
         }
         Conversations.NotifyChanged();
-        await ChatStorage.AppendChatJsonAsync(Active.ChatId, new { type = "chat-start", chatId = Active.ChatId, topic = Active.Topic, ts = DateTimeOffset.UtcNow });
+        await ChatStorage.AppendChatJsonAsync(active.ChatId, new { type = "chat-start", chatId = active.ChatId, topic = active.Topic, ts = DateTimeOffset.UtcNow });
 
         // Resume logic: if the last round in the saved log didn't include every
         // participant (e.g. the previous session was killed mid-round), finish
@@ -925,7 +941,7 @@
                 .Select(m => m.ParticipantId)
                 .ToHashSet();
 
-            var participantIds = Active.Participants.Select(p => p.ParticipantId).ToHashSet();
+            var participantIds = active.Participants.Select(p => p.ParticipantId).ToHashSet();
             if (participantIds.IsSubsetOf(spokenInLast))
             {
                 round = lastRound; // round++ at top will jump to lastRound + 1
@@ -937,7 +953,7 @@
             }
         }
         var titleGenerated = isResume;
-        var maxRounds = Active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10;
+        var maxRounds = active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10;
         while (!state.StopRequested)
         {
             while ((_userChatFocused || state.VotePending) && !state.StopRequested)
@@ -949,7 +965,11 @@
                 state.StopRequested = true;
                 break;
             }
-            foreach (var p in Active.Participants)
+            // Snapshot the roster for this round: participants can be added mid-conversation
+            // (the member-list "+ Add" button), and iterating the live ObservableCollection
+            // while it mutates throws "Collection was modified". A newcomer simply speaks
+            // from the next round.
+            foreach (var p in active.Participants.ToList())
             {
                 if (state.StopRequested)
                     break;
@@ -966,27 +986,27 @@
 
                 try
                 {
-                    if (_pendingUserTurns.Count > 0)
+                    if (state.PendingUserTurns.Count > 0)
                     {
-                        sharedHistory.AddRange(_pendingUserTurns);
-                        _pendingUserTurns.Clear();
+                        sharedHistory.AddRange(state.PendingUserTurns);
+                        state.PendingUserTurns.Clear();
                     }
 
-                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, Active.Topic!, sharedHistory, Active.MaxTokens);
+                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId);
 
                     // If the user injected a message while the API call was in-flight,
                     // discard the stale response and re-call so the participant can pivot.
-                    if (_pendingUserTurns.Count > 0)
+                    if (state.PendingUserTurns.Count > 0)
                     {
-                        sharedHistory.AddRange(_pendingUserTurns);
-                        _pendingUserTurns.Clear();
+                        sharedHistory.AddRange(state.PendingUserTurns);
+                        state.PendingUserTurns.Clear();
 
                         // Wait for user to finish typing if still focused
                         while (_userChatFocused && !state.StopRequested)
                             await Task.Delay(50);
 
                         if (!state.StopRequested)
-                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, Active.Topic!, sharedHistory, Active.MaxTokens);
+                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId);
                     }
 
                     // Strip any participant-initiated vote request from the visible response
@@ -1014,12 +1034,12 @@
                         Round = round
                     });
 
-                    Active.Messages.Add(new PersistedMessage(p.ParticipantId, response, round, false));
+                    active.Messages.Add(new PersistedMessage(p.ParticipantId, response, round, false));
 
-                    await ChatStorage.AppendChatJsonAsync(Active.ChatId, new
+                    await ChatStorage.AppendChatJsonAsync(active.ChatId, new
                     {
                         type = "turn",
-                        chatId = Active.ChatId,
+                        chatId = active.ChatId,
                         participantId = p.ParticipantId,
                         templateId = p.TemplateId,
                         providerId = p.ProviderId,
@@ -1029,17 +1049,17 @@
                         ts = DateTimeOffset.UtcNow
                     });
 
-                    await ChatStorage.WritePerspectiveAsync(Active.ChatId, p.ParticipantId,
-                        $"# Perspective\n\n- ChatId: `{Active.ChatId}`\n- ParticipantId: `{p.ParticipantId}`\n- DisplayName: `{p.DisplayName}`\n- Provider: `{p.ProviderId}`\n\n## Personality\n\n{p.PersonalityMarkdown}\n\n## Latest\n\nRound {round}: {response}\n");
+                    await ChatStorage.WritePerspectiveAsync(active.ChatId, p.ParticipantId,
+                        $"# Perspective\n\n- ChatId: `{active.ChatId}`\n- ParticipantId: `{p.ParticipantId}`\n- DisplayName: `{p.DisplayName}`\n- Provider: `{p.ProviderId}`\n\n## Personality\n\n{p.PersonalityMarkdown}\n\n## Latest\n\nRound {round}: {response}\n");
 
                     // Stub "status events" to show cross-participant observations.
                     // Later this should be generated by each participant updating its own perspective and emitting diffs.
                     state.StatusEvents.Add(new StatusEvent(DateTimeOffset.UtcNow, $"{p.DisplayName} updated their perspective for this chat."));
-                    Active.StatusEvents.Add(new PersistedStatusEvent(DateTimeOffset.UtcNow, $"{p.DisplayName} updated their perspective for this chat."));
+                    active.StatusEvents.Add(new PersistedStatusEvent(DateTimeOffset.UtcNow, $"{p.DisplayName} updated their perspective for this chat."));
                     Conversations.NotifyChanged();
 
                     if (autoVoteQuestion is not null && !state.StopRequested)
-                        await RunParticipantVoteAsync(state, Active, sharedHistory, autoVoteQuestion, round);
+                        await RunParticipantVoteAsync(state, active, sharedHistory, autoVoteQuestion, round);
                 }
                 catch (Exception ex)
                 {
@@ -1051,7 +1071,7 @@
                         IsError = true
                     });
 
-                    Active.Messages.Add(new PersistedMessage(p.ParticipantId, $"[Error: {ex.Message}]", round, true));
+                    active.Messages.Add(new PersistedMessage(p.ParticipantId, $"[Error: {ex.Message}]", round, true));
                     Conversations.NotifyChanged();
                 }
 
@@ -1070,7 +1090,7 @@
             if (round == 1 && !titleGenerated)
             {
                 titleGenerated = true;
-                _ = ObserveFault(GenerateChatTitleAsync(Active, state), "GenerateChatTitleAsync");
+                _ = ObserveFault(GenerateChatTitleAsync(active, state), "GenerateChatTitleAsync");
             }
         }
 
@@ -1086,8 +1106,11 @@
             var topic = convo.Topic ?? "";
             var suggestions = new List<string>();
 
+            // Snapshot the roster — the live collection can mutate while these awaits are in flight.
+            var participants = convo.Participants.ToList();
+
             // Ask each participant to suggest a short title
-            foreach (var p in convo.Participants)
+            foreach (var p in participants)
             {
                 try
                 {
@@ -1116,7 +1139,7 @@
             }
             else
             {
-                var picker = convo.Participants.First();
+                var picker = participants.First();
                 var numbered = string.Join("\n", suggestions.Select((s, i) => $"{i + 1}. {s}"));
                 try
                 {
@@ -1222,11 +1245,14 @@
         ActiveState.Messages.Add(msg);
         Active.Messages.Add(new PersistedMessage(msg.ParticipantId, msg.Text, msg.Round, msg.IsError));
 
-        // Append to the storage log so it can be fully recreated.
+        // Append to the storage log so it can be fully recreated. The participantId is
+        // recorded so the on-reload restore (ChatStorage.LoadTurnsAsync) can replay this
+        // user turn instead of dropping it.
         await ChatStorage.AppendChatJsonAsync(Active.ChatId, new
         {
             type = "user",
             chatId = Active.ChatId,
+            participantId = "user",
             round,
             text,
             ts = DateTimeOffset.UtcNow
@@ -1235,14 +1261,12 @@
         // Also push into the next-turn context for all models.
         // We represent user turns as a pseudo-participant in shared history.
         // (The run loop rebuilds shared history only in-memory; this keeps it coherent during the session.)
-        _pendingUserTurns.Add(new SharedTurn { ModelId = "user", ModelName = "User", Text = text, Round = round });
+        ActiveState.PendingUserTurns.Add(new SharedTurn { ModelId = "user", ModelName = "User", Text = text, Round = round });
 
         _userMessage = "";
         Conversations.NotifyChanged();
         await InvokeAsync(StateHasChanged);
     }
-
-    private readonly List<SharedTurn> _pendingUserTurns = new();
 
     // Random topic state
     private bool _showRandomDropdown;
@@ -1375,6 +1399,13 @@
         public List<ConversationUiMessage> Messages { get; } = new();
         public List<StatusEvent> StatusEvents { get; } = new();
         public List<StatusEvent> Diagnostics { get; } = new();
+
+        /// <summary>
+        /// User- and vote-injected turns awaiting consumption by this conversation's run loop.
+        /// Scoped per-conversation so a message queued in one tab never bleeds into another's
+        /// context when that other tab is the next to run.
+        /// </summary>
+        public List<SharedTurn> PendingUserTurns { get; } = new();
     }
 
     private record StatusEvent(DateTimeOffset Timestamp, string Text);
@@ -1423,6 +1454,17 @@
             var msg = new ConversationUiMessage { ParticipantId = "vote", Text = voteText, Round = round };
             state.Messages.Add(msg);
             active.Messages.Add(new PersistedMessage("vote", voteText, round, false));
+
+            // Persist to the append-only log so the vote result survives a reload.
+            await ChatStorage.AppendChatJsonAsync(active.ChatId, new
+            {
+                type = "vote",
+                chatId = active.ChatId,
+                participantId = "vote",
+                round,
+                text = voteText,
+                ts = DateTimeOffset.UtcNow
+            });
 
             if (result.QuorumReached)
             {
@@ -1486,6 +1528,10 @@
     private async Task SubmitVoteAsync()
     {
         if (Active is null) return;
+        // Pin to the conversation the vote was launched from; the await below yields the
+        // circuit and the user could switch tabs before the result lands.
+        var active = Active;
+        var state = GetState(active);
         _voteDialogVisible = false;
         _voteRunning = true;
         _voteError = null;
@@ -1501,17 +1547,28 @@
                 _ => new List<string>()
             };
             var quorum = _voteType == VoteDialogType.FreeForm ? Quorum.Plurality : Quorum.SimpleMajority;
-            var context = Active.Topic ?? "";
+            var context = active.Topic ?? "";
 
-            var result = await VotingService.VoteAsync(Active.Participants, _voteQuestion, context, options, quorum);
+            var result = await VotingService.VoteAsync(active.Participants, _voteQuestion, context, options, quorum);
 
             var voteText = $"[VOTE] Question: {_voteQuestion}\nDecision: {result.Consensus} ({result.ConsensusStrength:P0} agreement)\nSummary: {result.NarrativeSummary}";
-            var round = ActiveState.Messages.Count > 0 ? ActiveState.Messages.Max(m => m.Round) : 1;
+            var round = state.Messages.Count > 0 ? state.Messages.Max(m => m.Round) : 1;
 
             var msg = new ConversationUiMessage { ParticipantId = "vote", Text = voteText, Round = round };
-            ActiveState.Messages.Add(msg);
-            Active.Messages.Add(new PersistedMessage("vote", voteText, round, false));
-            _pendingUserTurns.Add(new SharedTurn { ModelId = "vote", ModelName = "Vote Result", Text = voteText, Round = round });
+            state.Messages.Add(msg);
+            active.Messages.Add(new PersistedMessage("vote", voteText, round, false));
+            state.PendingUserTurns.Add(new SharedTurn { ModelId = "vote", ModelName = "Vote Result", Text = voteText, Round = round });
+
+            // Persist to the append-only log so the vote result survives a reload.
+            await ChatStorage.AppendChatJsonAsync(active.ChatId, new
+            {
+                type = "vote",
+                chatId = active.ChatId,
+                participantId = "vote",
+                round,
+                text = voteText,
+                ts = DateTimeOffset.UtcNow
+            });
 
             Conversations.NotifyChanged();
         }
@@ -1559,12 +1616,13 @@
 
     private void ToggleMidConvoAdd() => _showMidConvoAdd = !_showMidConvoAdd;
 
-    private void AddParticipantMidConvo(ParticipantTemplate t)
+    private async Task AddParticipantMidConvo(ParticipantTemplate t)
     {
         if (Active is null) return;
+        var active = Active;
         _showMidConvoAdd = false;
 
-        AddParticipant(Active, t);
+        AddParticipant(active, t);
 
         var round = ActiveState.Messages.Count > 0 ? ActiveState.Messages.Max(m => m.Round) : 1;
         var announcement = new ConversationUiMessage
@@ -1575,7 +1633,19 @@
             IsError = false
         };
         ActiveState.Messages.Add(announcement);
-        Active.Messages.Add(new PersistedMessage("system", announcement.Text, round, false));
+        active.Messages.Add(new PersistedMessage("system", announcement.Text, round, false));
+
+        // Persist to the append-only log so the join notice survives a reload.
+        await ChatStorage.AppendChatJsonAsync(active.ChatId, new
+        {
+            type = "system",
+            chatId = active.ChatId,
+            participantId = "system",
+            round,
+            text = announcement.Text,
+            ts = DateTimeOffset.UtcNow
+        });
+
         Conversations.NotifyChanged();
     }
 

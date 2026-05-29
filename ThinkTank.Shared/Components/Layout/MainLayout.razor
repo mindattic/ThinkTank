@@ -1,4 +1,6 @@
 ﻿@inherits LayoutComponentBase
+@inject AppearanceService Appearance
+@inject IJSRuntime JS
 
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div class="page">
@@ -7,3 +9,19 @@
         @Body
     </main>
 </div>
+
+@code {
+    // Apply persisted appearance on first interactive render of any page. Previously the
+    // saved theme / control sizing only took effect after visiting the Appearance tab,
+    // so a reload landed users on the default look until they opened Settings.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        await JS.InvokeVoidAsync("ThinkTank.setTheme", AppearanceService.ToThemeValue(Appearance.Mode));
+        await JS.InvokeVoidAsync("ThinkTank.setControlHeight", Appearance.ControlHeight);
+        await JS.InvokeVoidAsync("ThinkTank.setGutter", Appearance.Gutter);
+        await JS.InvokeVoidAsync("ThinkTank.setBorderRadius", Appearance.BorderRadius);
+    }
+}

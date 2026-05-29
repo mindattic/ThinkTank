@@ -183,6 +183,24 @@ public class ChatStorageTests
     }
 
     [Test]
+    public async Task LoadTurnsAsync_ReplaysUserVoteAndSystemEntries()
+    {
+        // Regression: user, vote, and system messages used to be dropped on reload because
+        // LoadTurnsAsync only recognized "turn". They must now round-trip in order, while
+        // bookkeeping entries ("status") stay out of the rebuilt transcript.
+        await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "turn", participantId = "p1", text = "Opening", round = 1 });
+        await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "user", participantId = "user", text = "Steer here", round = 1 });
+        await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "system", participantId = "system", text = "Bravo entered", round = 1 });
+        await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "status", text = "should be ignored" });
+        await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "vote", participantId = "vote", text = "[VOTE] ...", round = 2 });
+
+        var turns = await ChatStorage.LoadTurnsAsync(testChatId);
+
+        Assert.That(turns.Select(t => t.ParticipantId), Is.EqualTo(new[] { "p1", "user", "system", "vote" }));
+        Assert.That(turns.Select(t => t.Text), Is.EqualTo(new[] { "Opening", "Steer here", "Bravo entered", "[VOTE] ..." }));
+    }
+
+    [Test]
     public async Task LoadTurnsAsync_MissingFields_DefaultsGracefully()
     {
         await ChatStorage.AppendChatJsonAsync(testChatId, new { type = "turn" });

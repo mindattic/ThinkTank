@@ -63,6 +63,36 @@ public class AppearanceServiceTests
         Assert.That(settings.AppearanceTheme, Is.EqualTo("dracula"));
     }
 
+    // ── Theme round-trips through persistence (regression) ──────────────
+    // ParseMode previously only recognized 13 of the 18 themes; the newer ones
+    // (Aurora, Ember, Ocean, Forest, Mono) silently reverted to Dark on reload.
+
+    [TestCase("dark", AppearanceMode.Dark)]
+    [TestCase("neon", AppearanceMode.Neon)]
+    [TestCase("aurora", AppearanceMode.Aurora)]
+    [TestCase("ember", AppearanceMode.Ember)]
+    [TestCase("ocean", AppearanceMode.Ocean)]
+    [TestCase("forest", AppearanceMode.Forest)]
+    [TestCase("mono", AppearanceMode.Mono)]
+    public void Constructor_RestoresEveryPersistedTheme(string theme, AppearanceMode expected)
+    {
+        settings.SetAppearanceTheme(theme);
+
+        var restored = new AppearanceService(settings);
+
+        Assert.That(restored.Mode, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Constructor_UnknownTheme_FallsBackToDark()
+    {
+        settings.SetAppearanceTheme("not-a-real-theme");
+
+        var restored = new AppearanceService(settings);
+
+        Assert.That(restored.Mode, Is.EqualTo(AppearanceMode.Dark));
+    }
+
     // ── SetControlHeight ────────────────────────────────────────────────
 
     [Test]

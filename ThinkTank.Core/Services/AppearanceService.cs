@@ -86,24 +86,20 @@ public class AppearanceService
     }
 
     /// <summary>Parses a theme string to its enum value. Returns <c>null</c> for unrecognized themes.</summary>
+    /// <remarks>
+    /// Matches every <see cref="AppearanceMode"/> member by name (case-insensitive) so newly
+    /// added themes (Aurora, Ember, Ocean, Forest, Mono, …) round-trip through persistence
+    /// instead of silently falling back to <see cref="AppearanceMode.Dark"/> on reload.
+    /// The numeric guard rejects raw enum integers ("3") that <c>Enum.TryParse</c> would
+    /// otherwise accept, since persisted themes are always the lowercase name.
+    /// </remarks>
     private static AppearanceMode? ParseMode(string? theme)
-        => (theme ?? "").Trim().ToLowerInvariant() switch
-        {
-            "dark" => AppearanceMode.Dark,
-            "light" => AppearanceMode.Light,
-            "spring" => AppearanceMode.Spring,
-            "summer" => AppearanceMode.Summer,
-            "autumn" => AppearanceMode.Autumn,
-            "winter" => AppearanceMode.Winter,
-            "matrix" => AppearanceMode.Matrix,
-            "ice" => AppearanceMode.Ice,
-            "sunset" => AppearanceMode.Sunset,
-            "neon" => AppearanceMode.Neon,
-            "dracula" => AppearanceMode.Dracula,
-            "solarized" => AppearanceMode.Solarized,
-            "midnight" => AppearanceMode.Midnight,
-            _ => null
-        };
+    {
+        var name = (theme ?? "").Trim();
+        if (name.Length == 0 || char.IsDigit(name[0]))
+            return null;
+        return Enum.TryParse<AppearanceMode>(name, ignoreCase: true, out var mode) ? mode : null;
+    }
 
     /// <summary>Converts an <see cref="AppearanceMode"/> enum value to its lowercase string for persistence and CSS class mapping.</summary>
     public static string ToThemeValue(AppearanceMode mode)
