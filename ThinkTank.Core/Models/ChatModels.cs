@@ -66,6 +66,12 @@ public class ChatConversation
     /// <summary>Per-conversation max rounds override. When set, the conversation auto-pauses after this many rounds.</summary>
     public int? MaxRounds { get; set; }
 
+    /// <summary>
+    /// Per-conversation response-length preset override (<see cref="ResponseLengthPreset"/>).
+    /// When set, overrides the global default for all participants in this conversation.
+    /// </summary>
+    public string? ResponseLength { get; set; }
+
     /// <summary>Ordered list of all messages (both successful responses and errors) in this conversation.</summary>
     public List<PersistedMessage> Messages { get; } = new();
 

@@ -29,6 +29,9 @@ public sealed record PersistedConversation(
 
     /// <summary>Per-conversation max rounds override, or <c>null</c> to use global default.</summary>
     public int? MaxRounds { get; init; }
+
+    /// <summary>Per-conversation response-length preset override, or <c>null</c> to use global default.</summary>
+    public string? ResponseLength { get; init; }
 }
 
 /// <summary>

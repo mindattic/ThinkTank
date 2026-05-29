@@ -52,6 +52,18 @@
                            aria-describedby="defaults-max-rounds-hint"
                            @onchange="OnGlobalMaxRoundsChanged" />
 
+                    <label for="defaults-response-length" style="margin-top:1rem;">Global Response Length</label>
+                    <p id="defaults-response-length-hint" class="options-hint" style="margin-top:0;">How much each participant writes per turn. Keeps replies brief so participants don't write chapters. Individual conversations can override this.</p>
+                    <select id="defaults-response-length"
+                            value="@ResponseLengthPreset.Normalize(ThinkTankSettings.GlobalResponseLength)"
+                            aria-describedby="defaults-response-length-hint"
+                            @onchange="OnGlobalResponseLengthChanged">
+                        @foreach (var opt in ResponseLengthPreset.Options)
+                        {
+                            <option value="@opt.Value">@opt.Label (@opt.Hint)</option>
+                        }
+                    </select>
+
                     <label for="defaults-claude-fallback" style="margin-top:1.25rem; display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
                         <input id="defaults-claude-fallback" type="checkbox"
                                checked="@ThinkTankSettings.ClaudeFallbackMode"
@@ -237,6 +249,9 @@
         if (int.TryParse(e.Value?.ToString(), out var val) && val >= 1 && val <= 999)
             ThinkTankSettings.SetGlobalMaxRounds(val);
     }
+
+    private void OnGlobalResponseLengthChanged(ChangeEventArgs e)
+        => ThinkTankSettings.SetGlobalResponseLength(ResponseLengthPreset.Normalize(e.Value?.ToString()));
 
     private void OnClaudeFallbackToggled(ChangeEventArgs e)
     {

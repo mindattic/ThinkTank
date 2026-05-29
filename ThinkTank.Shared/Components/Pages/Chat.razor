@@ -324,7 +324,17 @@
                                        value="@(Active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10)"
                                        aria-describedby="conv-options-hint"
                                        @onchange="OnMaxRoundsChanged" />
-                                <div id="conv-options-hint" class="options-hint">Global defaults: @(Settings.GlobalMaxTokens ?? 2048) tokens, @(Settings.GlobalMaxRounds ?? 10) rounds</div>
+                                <label class="options-label" for="conv-response-length" style="margin-top:0.5rem">Response Length</label>
+                                <select id="conv-response-length" class="options-input"
+                                        value="@ResponseLengthPreset.Normalize(Active.ResponseLength ?? Settings.GlobalResponseLength)"
+                                        aria-describedby="conv-options-hint"
+                                        @onchange="OnResponseLengthChanged">
+                                    @foreach (var opt in ResponseLengthPreset.Options)
+                                    {
+                                        <option value="@opt.Value">@opt.Label (@opt.Hint)</option>
+                                    }
+                                </select>
+                                <div id="conv-options-hint" class="options-hint">Global defaults: @(Settings.GlobalMaxTokens ?? 2048) tokens, @(Settings.GlobalMaxRounds ?? 10) rounds, @ResponseLengthPreset.Normalize(Settings.GlobalResponseLength) length</div>
                             </div>
                         </div>
                         @if (!_followConversation)
@@ -992,7 +1002,7 @@
                         state.PendingUserTurns.Clear();
                     }
 
-                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId);
+                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength);
 
                     // If the user injected a message while the API call was in-flight,
                     // discard the stale response and re-call so the participant can pivot.
@@ -1006,7 +1016,7 @@
                             await Task.Delay(50);
 
                         if (!state.StopRequested)
-                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId);
+                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength);
                     }
 
                     // Strip any participant-initiated vote request from the visible response
@@ -1601,6 +1611,13 @@
         if (Active is null) return;
         if (int.TryParse(e.Value?.ToString(), out var val) && val >= 1 && val <= 999)
             Active.MaxRounds = val;
+        Conversations.NotifyChanged();
+    }
+
+    private void OnResponseLengthChanged(ChangeEventArgs e)
+    {
+        if (Active is null) return;
+        Active.ResponseLength = ResponseLengthPreset.Normalize(e.Value?.ToString());
         Conversations.NotifyChanged();
     }
 

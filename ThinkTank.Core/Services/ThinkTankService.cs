@@ -108,7 +108,8 @@ public class ThinkTankService
         string topic,
         List<SharedTurn> history,
         int? maxTokensOverride = null,
-        string? speakerId = null)
+        string? speakerId = null,
+        string? responseLength = null)
     {
         // Claude fallback: route everyone through Anthropic with the original
         // provider's persona wrapped in a roleplay frame.
@@ -142,6 +143,12 @@ public class ThinkTankService
         // History turns are keyed by ParticipantId, so prefer the caller-supplied speakerId;
         // fall back to providerId for legacy single-participant-per-provider callers.
         var (systemPrompt, turns) = BuildPrompt(actualProviderId, speakerId ?? providerId, actualPersona, topic, history, maxContextTurns);
+
+        // Roundtable callers pass a response-length preset so participants give brief,
+        // complete answers instead of rambling up to the token ceiling. Auxiliary callers
+        // (name/topic/personality generation) leave it null and are not constrained.
+        if (!string.IsNullOrWhiteSpace(responseLength))
+            systemPrompt += ResponseLengthPreset.InstructionFor(responseLength);
 
         try
         {

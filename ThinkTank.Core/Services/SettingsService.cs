@@ -91,6 +91,13 @@ public class ThinkTankSettingsService
     public int? GlobalMaxContextTurns { get; private set; } = 8;
 
     /// <summary>
+    /// Global default response-length preset (<see cref="ResponseLengthPreset"/>) applied to every
+    /// participant's turn. Conversations inherit this unless overridden. Keeps roundtable replies
+    /// brief so participants don't write entire chapters on their turn.
+    /// </summary>
+    public string? GlobalResponseLength { get; private set; } = ResponseLengthPreset.Default;
+
+    /// <summary>
     /// When <c>true</c>, every non-Claude participant routes through the Anthropic API, with the
     /// Claude model roleplaying as that participant's persona. Used as a fallback when other
     /// providers are rate-limited or down. Each participant retains its unique persona prompt.
@@ -457,6 +464,7 @@ public class ThinkTankSettingsService
             GlobalMaxTokens = dto.GlobalMaxTokens ?? 2048;
             GlobalMaxRounds = dto.GlobalMaxRounds ?? 10;
             GlobalMaxContextTurns = dto.GlobalMaxContextTurns ?? 8;
+            GlobalResponseLength = ResponseLengthPreset.Normalize(dto.GlobalResponseLength);
             ClaudeFallbackMode = dto.ClaudeFallbackMode ?? false;
             return true;
         }
@@ -496,6 +504,7 @@ public class ThinkTankSettingsService
                     GlobalMaxTokens = GlobalMaxTokens,
                     GlobalMaxRounds = GlobalMaxRounds,
                     GlobalMaxContextTurns = GlobalMaxContextTurns,
+                    GlobalResponseLength = GlobalResponseLength,
                     ClaudeFallbackMode = ClaudeFallbackMode
                 };
 
@@ -583,6 +592,16 @@ public class ThinkTankSettingsService
     public void SetGlobalMaxContextTurns(int turns)
     {
         GlobalMaxContextTurns = turns < 2 ? 2 : turns;
+        Save();
+    }
+
+    /// <summary>
+    /// Sets the global default response-length preset and persists to disk. Unrecognized
+    /// values are coerced to <see cref="ResponseLengthPreset.Default"/>.
+    /// </summary>
+    public void SetGlobalResponseLength(string value)
+    {
+        GlobalResponseLength = ResponseLengthPreset.Normalize(value);
         Save();
     }
 
@@ -764,6 +783,7 @@ public class ThinkTankSettingsService
         public int? GlobalMaxTokens { get; set; }
         public int? GlobalMaxRounds { get; set; }
         public int? GlobalMaxContextTurns { get; set; }
+        public string? GlobalResponseLength { get; set; }
         public bool? ClaudeFallbackMode { get; set; }
     }
 }
