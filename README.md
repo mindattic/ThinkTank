@@ -259,7 +259,7 @@ For deployments where API keys live outside `Settings.json` — Azure App Servic
 MindAttic:Vault:LLM:<providerId>:apiKey
 ```
 
-Configuration sources are layered in `ThinkTank.Blazor/Program.cs` (later wins): `appsettings.json` → `%APPDATA%\MindAttic\LLM\providers.json` (via `AddMindAtticVaultFiles`) → project user-secrets → shared user-secrets (`mindattic-vault-shared`) → environment variables (App Service Application Settings + Key Vault refs).
+Configuration sources are layered in `ThinkTank.Blazor/Program.cs` (later wins): `appsettings.json` → `%APPDATA%\MindAttic\LLM\providers.json` (via `AddMindAtticVaultFiles`, the single local source of truth) → environment variables (App Service Application Settings + Key Vault refs). User Secrets was retired family-wide in MindAttic.Vault 0.3.0.
 
 **Precedence within `GetKeyForProvider`:**
 

@@ -8,17 +8,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Cloud-native configuration chain. Layered so existing dev workflows keep working:
 //   - AddJsonFile (already added by WebApplicationBuilder for appsettings.json).
-//   - AddMindAtticVaultFiles surfaces %APPDATA%\MindAttic\LLM\providers.json on dev machines.
-//   - AddUserSecrets<Program>() reads the existing project-specific store (kept so
-//     the migrated ProviderDefaults:* keys keep flowing into the existing factory below).
-//   - AddUserSecrets("mindattic-vault-shared") layers the shared family store so a
-//     single `dotnet user-secrets --id mindattic-vault-shared set ...` populates every
-//     MindAttic project at once.
+//   - AddMindAtticVaultFiles surfaces %APPDATA%\MindAttic\LLM\providers.json on dev machines
+//     — the single credential source now that .NET User Secrets is retired. ProviderDefaults:*
+//     keys come from appsettings.json (the shared store never held them), so the factory
+//     below keeps working unchanged.
 //   - AddEnvironmentVariables (already present) picks up App Service Application Settings
 //     and Key Vault references in production.
 builder.Configuration
-    .AddMindAtticVaultFiles()
-    .AddUserSecrets("mindattic-vault-shared");
+    .AddMindAtticVaultFiles();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

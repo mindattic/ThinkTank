@@ -9,7 +9,7 @@
 
     <ItemGroup>
         <PackageReference Include="MindAttic.Legion" Version="2.2.0" />
-        <PackageReference Include="MindAttic.Vault" Version="0.2.0" />
+        <PackageReference Include="MindAttic.Vault" Version="0.3.0" />
     </ItemGroup>
 
 </Project>

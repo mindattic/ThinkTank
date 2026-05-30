@@ -5,8 +5,7 @@
         <RootNamespace>ThinkTank.Blazor</RootNamespace>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-      <UserSecretsId>956725ba-eb8e-4594-901a-edf40a7d4312</UserSecretsId>
-  </PropertyGroup>
+    </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\ThinkTank.Core\ThinkTank.Core.csproj" />
