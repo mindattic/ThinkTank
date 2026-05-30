@@ -77,12 +77,13 @@
                         personality prompt. Only the Claude API key is used.
                     </p>
 
-                    <p style="margin-top:1.25rem;"><strong>Shared credentials file</strong></p>
+                    <p style="margin-top:1.25rem;"><strong>API keys (managed in MindAttic Vault)</strong></p>
                     <p class="options-hint" style="margin-top:0;">
-                        API keys live at <code>@SharedCredentialsPath</code>
+                        Keys are read from MindAttic Vault — User Secrets, environment / App Service, or the
+                        shared file <code>@SharedCredentialsPath</code> (in that order). There is no in-app key entry.
                     </p>
                     <p class="options-hint" style="margin-top:-0.25rem;">
-                        Every MindAttic application reads from and writes to this file, so configuring a key here makes it available across all of them.
+                        Set or rotate a key once in Vault and every MindAttic application picks it up.
                     </p>
                 </div>
             }

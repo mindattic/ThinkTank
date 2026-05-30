@@ -30,7 +30,7 @@ public class SettingsServiceTests
     public void GetAuthJson_KnownProvider_ReturnsJson()
     {
         var json = sut.GetAuthJson("openai");
-        Assert.That(json, Does.Contain("apiKey"));
+        Assert.That(json, Does.Contain("model")); // non-secret provider config; keys live in Vault
     }
 
     [Test]
@@ -61,20 +61,18 @@ public class SettingsServiceTests
     }
 
     [Test]
-    public void GetKeyForProvider_NullOverride_ExtractsFromAuthJson()
+    public void GetKeyForProvider_NullOverride_ReturnsVaultOverride()
     {
-        sut.ProviderAuth["testprov"] = new ProviderAuthConfig("testprov",
-            "{\"type\":\"bearer\",\"apiKey\":\"sk-test-123\"}");
+        sut.RuntimeApiKeyOverrides["testprov"] = "sk-test-123"; // populated from Vault config
 
         var key = sut.GetKeyForProvider("testprov", null);
         Assert.That(key, Is.EqualTo("sk-test-123"));
     }
 
     [Test]
-    public void GetKeyForProvider_EmptyOverride_ExtractsFromAuthJson()
+    public void GetKeyForProvider_EmptyOverride_ReturnsVaultOverride()
     {
-        sut.ProviderAuth["testprov"] = new ProviderAuthConfig("testprov",
-            "{\"type\":\"bearer\",\"apiKey\":\"sk-test-456\"}");
+        sut.RuntimeApiKeyOverrides["testprov"] = "sk-test-456";
 
         var key = sut.GetKeyForProvider("testprov", "");
         Assert.That(key, Is.EqualTo("sk-test-456"));
@@ -210,56 +208,18 @@ public class SettingsServiceTests
     // ── SetAuthJson / GetAuthJson roundtrip ─────────────────────────────
 
     [Test]
-    public void SetAuthJson_ThenGetAuthJson_Roundtrips()
+    public void SetAuthJson_StripsApiKey_PreservesNonSecretConfig()
     {
-        var json = "{\"type\":\"bearer\",\"apiKey\":\"test-key\",\"model\":\"gpt-4\"}";
-        sut.SetAuthJson("testprov_roundtrip", json);
+        // SetAuthJson persists only non-secret config; any apiKey is dropped (Vault-managed).
+        sut.SetAuthJson("testprov_roundtrip", "{\"type\":\"bearer\",\"apiKey\":\"test-key\",\"model\":\"gpt-4\"}");
 
         var result = sut.GetAuthJson("testprov_roundtrip");
-        Assert.That(result, Is.EqualTo(json));
+        using var doc = System.Text.Json.JsonDocument.Parse(result);
+        Assert.That(doc.RootElement.TryGetProperty("apiKey", out _), Is.False);
+        Assert.That(doc.RootElement.GetProperty("model").GetString(), Is.EqualTo("gpt-4"));
 
         // Cleanup
         sut.ProviderAuth.Remove("testprov_roundtrip");
-    }
-
-    // ── SetKey ──────────────────────────────────────────────────────────
-
-    [Test]
-    public void SetKey_UpdatesApiKeyInAuthJson()
-    {
-        sut.SetKey("openai", "sk-new-key-123");
-
-        var json = sut.GetAuthJson("openai");
-        var doc = System.Text.Json.JsonDocument.Parse(json);
-        var apiKey = doc.RootElement.GetProperty("apiKey").GetString();
-        Assert.That(apiKey, Is.EqualTo("sk-new-key-123"));
-    }
-
-    [Test]
-    public void SetKey_PreservesModelSetting()
-    {
-        var originalJson = sut.GetAuthJson("openai");
-        var originalDoc = System.Text.Json.JsonDocument.Parse(originalJson);
-        var originalModel = originalDoc.RootElement.GetProperty("model").GetString();
-
-        sut.SetKey("openai", "new-key");
-
-        var updatedJson = sut.GetAuthJson("openai");
-        var updatedDoc = System.Text.Json.JsonDocument.Parse(updatedJson);
-        var updatedModel = updatedDoc.RootElement.GetProperty("model").GetString();
-
-        Assert.That(updatedModel, Is.EqualTo(originalModel));
-    }
-
-    [Test]
-    public void SetKey_PreservesTypeSetting()
-    {
-        sut.SetKey("claude", "new-key");
-
-        var json = sut.GetAuthJson("claude");
-        var doc = System.Text.Json.JsonDocument.Parse(json);
-        var type = doc.RootElement.GetProperty("type").GetString();
-        Assert.That(type, Is.EqualTo("anthropic"));
     }
 
     // ── ResetProvidersToDefaults ────────────────────────────────────────
@@ -279,12 +239,14 @@ public class SettingsServiceTests
     public void ResetProvidersToDefaults_AppliesDefaults()
     {
         sut.ProviderDefaults["openai"] = new ProviderAuthConfig("openai",
-            "{\"type\":\"bearer\",\"apiKey\":\"default-key\",\"model\":\"gpt-4\"}");
+            "{\"type\":\"bearer\",\"apiKey\":\"default-key\",\"model\":\"gpt-4-default\"}");
 
         sut.ResetProvidersToDefaults();
 
+        // Non-secret config is applied; the apiKey is stripped (keys come from Vault).
         var json = sut.GetAuthJson("openai");
-        Assert.That(json, Does.Contain("default-key"));
+        Assert.That(json, Does.Contain("gpt-4-default"));
+        Assert.That(json, Does.Not.Contain("default-key"));
     }
 
     // ── SetConversations ────────────────────────────────────────────────
@@ -432,39 +394,12 @@ public class SettingsServiceTests
     }
 
     [Test]
-    public void Construction_SyncsEveryKnownProviderToSharedStore()
+    public void Construction_DoesNotWriteCredentialsToSharedStore()
     {
-        // After constructing a fresh SettingsService against an empty sandbox, every
-        // provider this app supports should be present in the shared store so sibling
-        // MindAttic apps can see the same credentials.
+        // Keys are Vault-managed; constructing the service must NOT push anything into the
+        // shared providers.json store (no in-app credential persistence).
         var shared = MindAtticCredentialStore.LoadAllRaw();
-        var standardProviders = new[] { "openai", "claude", "gemini", "deepseek" };
-
-        foreach (var providerId in standardProviders)
-            Assert.That(shared.ContainsKey(providerId), Is.True, $"{providerId} missing from shared store");
-    }
-
-    [Test]
-    public void SetAuthJson_PropagatesToSharedStore()
-    {
-        var json = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"sk-propagation-test\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}";
-        sut.SetAuthJson("openai", json);
-
-        var fromShared = MindAtticCredentialStore.LoadAllRaw().TryGetValue("openai", out var raw) ? raw : null;
-        Assert.That(fromShared, Is.Not.Null);
-        Assert.That(fromShared, Does.Contain("sk-propagation-test"));
-    }
-
-    [Test]
-    public void Overlay_SharedStoreValuesTakePrecedenceOverLocal()
-    {
-        // Pre-seed shared store with a known apiKey, then spin up a fresh SettingsService
-        // and verify it reads the shared value rather than the default stub.
-        var sharedJson = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"sk-from-shared-store\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}";
-        MindAtticCredentialStore.SaveRaw("openai", sharedJson);
-
-        var fresh = new SettingsService();
-        Assert.That(fresh.GetKeyForProvider("openai", null), Is.EqualTo("sk-from-shared-store"));
+        Assert.That(shared, Is.Empty);
     }
 
     [Test]

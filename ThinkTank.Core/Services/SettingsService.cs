@@ -169,9 +169,7 @@ public class ThinkTankSettingsService
     {
         if (TryLoad())
         {
-            OverlaySharedCredentials();
             EnsureDefaultsIfMissing();
-            SyncLocalToSharedStore();
             EnsurePersonalityFiles();
             return;
         }
@@ -184,73 +182,8 @@ public class ThinkTankSettingsService
         Templates.AddRange(CreateDefaultTemplates());
 
         AppearanceTheme = "dark";
-        OverlaySharedCredentials();
-        SyncLocalToSharedStore();
         EnsurePersonalityFiles();
         Save();
-    }
-
-    /// <summary>
-    /// Pushes every in-memory provider auth entry up to the shared MindAttic store,
-    /// via per-key upsert so sibling-app entries already on disk are preserved. Makes
-    /// the shared file a complete superset for every provider this app supports, and
-    /// propagates any normalizations (like <c>maxTokens</c> backfill) so the next
-    /// launch does not have to re-normalize.
-    /// </summary>
-    private void SyncLocalToSharedStore()
-    {
-        try
-        {
-            var shared = MindAtticCredentialStore.ProvidersFileExists()
-                ? MindAtticCredentialStore.LoadAllRaw()
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var (providerId, cfg) in ProviderAuth)
-            {
-                if (!shared.TryGetValue(providerId, out var existing) || !string.Equals(existing, cfg.Json, StringComparison.Ordinal))
-                    MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[ThinkTank.Settings] SyncLocalToSharedStore failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Overlays the shared MindAttic credentials store on top of the local provider auth.
-    /// The shared store at <c>%APPDATA%\MindAttic\LLM\providers.json</c> is the canonical
-    /// source for API keys/models so every MindAttic app shares the same configuration.
-    /// On first run, if the shared store is missing, the current local credentials are
-    /// migrated up to it so other apps can pick them up.
-    /// </summary>
-    private void OverlaySharedCredentials()
-    {
-        try
-        {
-            if (!MindAtticCredentialStore.ProvidersFileExists())
-            {
-                // Migrate: seed the shared store from whatever local credentials exist now,
-                // upserting per-key so any sibling-app entries already on disk are preserved.
-                foreach (var (providerId, cfg) in ProviderAuth)
-                    MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
-                return;
-            }
-
-            // Overlay shared values, but only for providers this app supports. Cross-app
-            // entries (providers another MindAttic app uses but we don't) stay in the file
-            // untouched and never enter our in-memory ProviderAuth.
-            var shared = MindAtticCredentialStore.LoadAllRaw();
-            foreach (var (providerId, json) in shared)
-            {
-                if (ProviderAuth.ContainsKey(providerId))
-                    ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[ThinkTank.Settings] OverlaySharedCredentials failed: {ex.Message}");
-        }
     }
 
     /// <summary>
@@ -494,7 +427,9 @@ public class ThinkTankSettingsService
             {
                 var dto = new PersistedSettings
                 {
-                    ProviderAuth = ProviderAuth.ToDictionary(k => k.Key, v => (string?)v.Value.Json),
+                    // Strip apiKey from every provider blob — credentials are Vault-managed and
+                    // must never be persisted (this also scrubs keys saved by older versions).
+                    ProviderAuth = ProviderAuth.ToDictionary(k => k.Key, v => (string?)StripApiKey(v.Value.Json)),
                     Templates = Templates,
                     Conversations = Conversations,
                     AppearanceTheme = AppearanceTheme,
@@ -532,15 +467,31 @@ public class ThinkTankSettingsService
         => ProviderAuth.TryGetValue(providerId, out var cfg) ? cfg.Json : "{}";
 
     /// <summary>
-    /// Updates the authentication JSON for a provider and persists it to both the local
-    /// settings file and the shared <c>%APPDATA%\MindAttic\LLM\providers.json</c> store so
-    /// every MindAttic app picks up the change.
+    /// Updates a provider's non-secret config (type, model, maxTokens) and persists it to the
+    /// local settings file. Any <c>apiKey</c> in <paramref name="json"/> is stripped — credentials
+    /// are managed centrally in MindAttic Vault and never stored in-app.
     /// </summary>
     public void SetAuthJson(string providerId, string json)
     {
-        ProviderAuth[providerId] = new ProviderAuthConfig(providerId, json);
-        MindAtticCredentialStore.SaveRaw(providerId, json);
+        ProviderAuth[providerId] = new ProviderAuthConfig(providerId, StripApiKey(json));
         Save();
+    }
+
+    /// <summary>Returns <paramref name="json"/> with any <c>apiKey</c> field removed.</summary>
+    private static string StripApiKey(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "{}";
+        try
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject();
+            if (node is null) return "{}";
+            node.Remove("apiKey");
+            return node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return "{}";
+        }
     }
 
     /// <summary>Sets the active appearance theme and persists to disk. Defaults to "dark" if blank.</summary>
@@ -672,65 +623,23 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Resolves the API key for a provider. Precedence: explicit per-call override,
-    /// then the on-disk auth JSON's <c>apiKey</c> field (if non-empty), then any
-    /// runtime override resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
-    /// via <see cref="RuntimeApiKeyOverrides"/>. The runtime fallback lets cloud-deployed
-    /// instances run without any apiKey on disk while still allowing a developer's local
-    /// key to win when explicitly set.
+    /// Resolves the API key for a provider. Keys are NOT stored in-app — they come from
+    /// MindAttic.Vault: an explicit per-call override (used by per-persona auth overrides),
+    /// otherwise the runtime value resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
+    /// (User Secrets / env / App Service / Key Vault → the shared providers.json) via
+    /// <see cref="RuntimeApiKeyOverrides"/>, populated by
+    /// <see cref="SettingsServiceVaultOverlay.OverlayFromConfiguration"/>.
     /// </summary>
     public string GetKeyForProvider(string providerId, string? apiKeyOverride)
     {
         if (!string.IsNullOrWhiteSpace(apiKeyOverride))
             return apiKeyOverride;
 
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(GetAuthJson(providerId));
-            if (doc.RootElement.TryGetProperty("apiKey", out var apiKey))
-            {
-                var diskKey = apiKey.GetString();
-                if (!string.IsNullOrWhiteSpace(diskKey))
-                    return diskKey;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[ThinkTank.Settings] malformed disk auth for '{providerId}' (apiKey lookup): {ex.Message}");
-        }
-
         if (RuntimeApiKeyOverrides.TryGetValue(providerId, out var runtimeKey)
             && !string.IsNullOrWhiteSpace(runtimeKey))
             return runtimeKey;
 
         return "";
-    }
-
-    /// <summary>
-    /// Updates just the API key for a provider while preserving its existing type, model, and maxTokens settings.
-    /// </summary>
-    public void SetKey(string providerId, string apiKey)
-    {
-        string? type = null;
-        string? model = null;
-        int? maxTokens = null;
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(GetAuthJson(providerId));
-            type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
-            model = doc.RootElement.TryGetProperty("model", out var m) ? m.GetString() : null;
-            if (doc.RootElement.TryGetProperty("maxTokens", out var mt) && mt.ValueKind == System.Text.Json.JsonValueKind.Number)
-                maxTokens = mt.GetInt32();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[ThinkTank.Settings] SetKey: failed to parse existing auth for '{providerId}': {ex.Message}");
-        }
-
-        if (string.IsNullOrWhiteSpace(type))
-            type = providerId is "claude" ? "anthropic" : providerId is "gemini" ? "google" : "bearer";
-
-        SetAuthJson(providerId, BuildAuthJson(type!, apiKey, model, maxTokens));
     }
 
     /// <summary>
@@ -761,11 +670,9 @@ public class ThinkTankSettingsService
         if (ProviderDefaults.Count == 0)
             return;
 
+        // Apply non-secret config only; apiKeys are Vault-managed and never written to disk.
         foreach (var (providerId, cfg) in ProviderDefaults)
-        {
-            ProviderAuth[providerId] = cfg;
-            MindAtticCredentialStore.SaveRaw(providerId, cfg.Json);
-        }
+            ProviderAuth[providerId] = new ProviderAuthConfig(providerId, StripApiKey(cfg.Json));
 
         Save();
     }

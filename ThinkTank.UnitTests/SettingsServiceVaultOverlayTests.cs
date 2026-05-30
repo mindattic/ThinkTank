@@ -153,16 +153,18 @@ public class SettingsServiceVaultOverlayTests
     }
 
     [Test]
-    public void GetKeyForProvider_DiskKey_WinsOverRuntime()
+    public void GetKeyForProvider_IgnoresDiskKey_UsesRuntime()
     {
+        // In-app/on-disk keys are no longer honored — credentials come from Vault only,
+        // so a stray key in the auth JSON must be ignored in favor of the runtime overlay.
         sut.ProviderAuth["openai"] = new ProviderAuthConfig("openai",
             "{\"apiKey\":\"sk-disk\"}");
         sut.RuntimeApiKeyOverrides["openai"] = "sk-runtime";
 
         var key = sut.GetKeyForProvider("openai", null);
 
-        Assert.That(key, Is.EqualTo("sk-disk"),
-            "When the user has explicitly set a key on disk, it wins over the cloud overlay.");
+        Assert.That(key, Is.EqualTo("sk-runtime"),
+            "Disk keys are ignored; the Vault-resolved runtime override is the source of truth.");
     }
 
     [Test]

@@ -32,7 +32,7 @@ public class NameGeneratorServiceTests
         }
 
         settings = new SettingsService();
-        settings.SetKey("openai", "test-api-key");
+        settings.RuntimeApiKeyOverrides["openai"] = "test-api-key"; // keys come from Vault overlay
 
         handler = new ScriptedHandler();
         var legion = new LegionClient(new HttpClient(handler));
