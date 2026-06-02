@@ -190,35 +190,34 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Creates the built-in default participant templates by sourcing one persona per
-    /// provider from <see cref="PersonaLibrary.Defaults"/>. Each persona has an empty
-    /// PersonalityMarkdown by Legion convention — the call layer in
-    /// <see cref="ThinkTankService"/> wraps empty prompts with a generic roundtable
-    /// framing so the LLM still has context about the format.
+    /// Creates the built-in default participant templates — one raw, instruction-free
+    /// seat per default provider in <see cref="LlmProviderCatalog"/>. (Legion's library
+    /// no longer carries per-provider "default" personas: a bare LLM has no persona, so
+    /// the raw roundtable seats are derived from the provider catalog here.) The empty
+    /// PersonalityMarkdown is wrapped with a generic roundtable framing by the call layer
+    /// in <see cref="ThinkTankService"/> so the LLM still has context about the format.
+    /// Template/persona ids keep the historical <c>default-&lt;provider&gt;</c> shape so
+    /// existing settings files continue to resolve.
     /// </summary>
     private static List<ParticipantTemplate> CreateDefaultTemplates()
     {
-        const string defaultPrefix = "default-";
         var allowedProviders = LlmProviderCatalog.DefaultIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var result = new List<ParticipantTemplate>(PersonaLibrary.Defaults.Count);
-        foreach (var persona in PersonaLibrary.Defaults)
+        var result = new List<ParticipantTemplate>();
+        foreach (var provider in LlmProviderCatalog.All)
         {
-            var providerId = persona.Id.StartsWith(defaultPrefix, StringComparison.Ordinal)
-                ? persona.Id[defaultPrefix.Length..]
-                : persona.Id;
-
-            if (!allowedProviders.Contains(providerId))
+            if (!allowedProviders.Contains(provider.Id))
                 continue;
 
+            var personaId = $"default-{provider.Id}";
             result.Add(new ParticipantTemplate(
-                TemplateId: $"legion-{persona.Id}",
-                ProviderId: providerId,
-                DisplayName: persona.Name,
-                PersonalityMarkdown: persona.PersonalityMarkdown,
+                TemplateId: $"legion-{personaId}",
+                ProviderId: provider.Id,
+                DisplayName: provider.DisplayName,
+                PersonalityMarkdown: "",
                 AuthOverrideJson: null,
                 IsDefault: true)
             {
-                PersonaId = persona.Id
+                PersonaId = personaId
             });
         }
         return result;
