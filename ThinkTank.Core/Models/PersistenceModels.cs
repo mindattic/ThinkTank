@@ -72,4 +72,13 @@ public sealed record PersistedParticipant(
     string ProviderId,
     string DisplayName,
     string PersonalityMarkdown,
-    string? AuthOverrideJson);
+    string? AuthOverrideJson)
+{
+    /// <summary>
+    /// The MindAttic.Legion <c>Persona.Id</c> this participant was sourced from, or <c>null</c>
+    /// for hand-authored personalities. Persisted so the psychometric profile can be re-resolved
+    /// on reload. Optional in JSON for backward compatibility with conversations saved before
+    /// psychometrics existed.
+    /// </summary>
+    public string? PersonaId { get; init; }
+}

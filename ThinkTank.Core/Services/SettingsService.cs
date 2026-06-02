@@ -28,13 +28,16 @@ public class SettingsService : ThinkTankSettingsService
 public class ThinkTankSettingsService
 {
     /// <summary>Per-provider authentication and model configuration, keyed by provider ID.</summary>
-    public Dictionary<string, ProviderAuthConfig> ProviderAuth { get; } = new();
+    /// <remarks>Case-insensitive so a participant whose <c>ProviderId</c> carries non-canonical
+    /// casing (e.g. "OpenAI") resolves the same entry that key/config lookups and
+    /// <see cref="RuntimeApiKeyOverrides"/> (also case-insensitive) use — they must agree.</remarks>
+    public Dictionary<string, ProviderAuthConfig> ProviderAuth { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Default provider auth configs (keyed by provider ID) loaded from an external source
     /// such as User Secrets. Used by <see cref="ResetProvidersToDefaults"/> to restore credentials.
     /// </summary>
-    public Dictionary<string, ProviderAuthConfig> ProviderDefaults { get; } = new();
+    public Dictionary<string, ProviderAuthConfig> ProviderDefaults { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Runtime-only apiKey overrides resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
@@ -117,11 +120,11 @@ public class ThinkTankSettingsService
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank");
 
     private static string LegacySettingsRoot
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank");
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "LLMThinkTank");
 
     /// <summary>
     /// One-shot rename of the legacy app-data folder from
-    /// <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c> to <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c>
+    /// <c>%LOCALAPPDATA%\MindAttic\LLMThinkTank</c> to <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c>
     /// after the app rename. Idempotent: only runs when the new folder is missing
     /// and the legacy one exists, so existing users keep every persisted
     /// conversation, template, and personality file. Failures are silent —
@@ -213,7 +216,10 @@ public class ThinkTankSettingsService
                 DisplayName: persona.Name,
                 PersonalityMarkdown: persona.PersonalityMarkdown,
                 AuthOverrideJson: null,
-                IsDefault: true));
+                IsDefault: true)
+            {
+                PersonaId = persona.Id
+            });
         }
         return result;
     }
@@ -379,8 +385,12 @@ public class ThinkTankSettingsService
                 return false;
 
             ProviderAuth.Clear();
-            foreach (var kvp in dto.ProviderAuth)
-                ProviderAuth[kvp.Key] = new ProviderAuthConfig(kvp.Key, kvp.Value ?? "{}");
+            // Null-guard like Templates/Conversations below: an explicit "ProviderAuth": null in
+            // Settings.json would otherwise NRE here, get caught, and silently discard the file's
+            // intact templates and conversations as the app "reinitializes with defaults".
+            if (dto.ProviderAuth is not null)
+                foreach (var kvp in dto.ProviderAuth)
+                    ProviderAuth[kvp.Key] = new ProviderAuthConfig(kvp.Key, kvp.Value ?? "{}");
 
             Templates.Clear();
             if (dto.Templates is not null)
@@ -396,7 +406,10 @@ public class ThinkTankSettingsService
             BorderRadius = dto.BorderRadius ?? 10;
             GlobalMaxTokens = dto.GlobalMaxTokens ?? 2048;
             GlobalMaxRounds = dto.GlobalMaxRounds ?? 10;
-            GlobalMaxContextTurns = dto.GlobalMaxContextTurns ?? 8;
+            // Apply the same floor the setter enforces (see SetGlobalMaxContextTurns): a value of
+            // 0/1 persisted by an older build or hand-edited file would otherwise leave participants
+            // with no prior-turn context, violating the documented "at least 2" invariant.
+            GlobalMaxContextTurns = Math.Max(2, dto.GlobalMaxContextTurns ?? 8);
             GlobalResponseLength = ResponseLengthPreset.Normalize(dto.GlobalResponseLength);
             ClaudeFallbackMode = dto.ClaudeFallbackMode ?? false;
             return true;
@@ -611,15 +624,32 @@ public class ThinkTankSettingsService
         Templates.Clear();
         foreach (var v in voters)
         {
+            var personaId = PersonaIdFromVoterId(v.VoterId);
             Templates.Add(new ParticipantTemplate(
                 TemplateId: ChatConversationsService.NewId(),
                 ProviderId: v.ProviderId,
                 DisplayName: v.Name,
                 PersonalityMarkdown: v.PersonalityMarkdown,
                 AuthOverrideJson: null,
-                IsDefault: false));
+                IsDefault: false)
+            {
+                PersonaId = personaId
+            });
         }
         Save();
+    }
+
+    /// <summary>
+    /// Recovers the Legion <c>Persona.Id</c> from a <see cref="VoterProfile.VoterId"/> produced by
+    /// <see cref="VoterFactory.GenerateUniqueVoters"/>, which mints ids as
+    /// <c>{personaId}-{8 hex chars}</c>. Strips that trailing disambiguator so the persona id
+    /// can key into the psychometric store; returns the input unchanged if it doesn't match.
+    /// </summary>
+    public static string? PersonaIdFromVoterId(string voterId)
+    {
+        if (string.IsNullOrWhiteSpace(voterId)) return null;
+        var m = System.Text.RegularExpressions.Regex.Match(voterId, "^(?<id>.+)-[0-9a-fA-F]{8}$");
+        return m.Success ? m.Groups["id"].Value : voterId;
     }
 
     /// <summary>

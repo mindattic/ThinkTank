@@ -369,7 +369,7 @@
                         </header>
 
                         <div class="messages-wrap">
-                            @if (_userChatFocused && ActiveState.Running)
+                            @if (ActiveState.UserChatFocused && ActiveState.Running)
                             {
                                 <div class="conversation-paused-overlay" role="status" aria-live="polite">
                                     <span>Conversation Paused</span>
@@ -568,7 +568,6 @@
     private int _lastRenderedMessageCount;
     private bool _pendingScrollToBottom;
     private string _userMessage = "";
-    private bool _userChatFocused;
 
     protected override void OnInitialized()
     {
@@ -615,19 +614,25 @@
 
     private void OnDiagnostics(string providerId, string raw, bool isError)
     {
-        if (Active is null)
-            return;
-
         var ts = DateTimeOffset.UtcNow;
         var prefix = isError ? $"{providerId.ToUpperInvariant()} ERROR" : $"{providerId.ToUpperInvariant()} OK";
         var text = $"{prefix}: {raw}";
         if (text.Length > 4000)
             text = text[..4000] + "…";
 
-        var e = new PersistedStatusEvent(ts, text);
-        Active.Diagnostics.Add(e);
-        ActiveState.Diagnostics.Add(new StatusEvent(e.Timestamp, e.Text));
-        Conversations.NotifyChanged();
+        // This fires synchronously from within an awaited Legion call, so the continuation may
+        // run off the circuit's sync context. Marshal the list mutation onto it (as ObserveFault
+        // does) — otherwise concurrent Add while the UI enumerates Diagnostics can throw
+        // "Collection was modified".
+        _ = InvokeAsync(() =>
+        {
+            if (Active is null)
+                return;
+            var e = new PersistedStatusEvent(ts, text);
+            Active.Diagnostics.Add(e);
+            ActiveState.Diagnostics.Add(new StatusEvent(e.Timestamp, e.Text));
+            Conversations.NotifyChanged();
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -803,7 +808,10 @@
             ProviderId: _legionSelectedProvider,
             DisplayName: persona.Name,
             PersonalityMarkdown: persona.PersonalityMarkdown,
-            AuthOverrideJson: null));
+            AuthOverrideJson: null)
+        {
+            PersonaId = persona.Id
+        });
 
         Conversations.NotifyChanged();
         _legionPickerVisible = false;
@@ -869,7 +877,10 @@
             ProviderId: t.ProviderId,
             DisplayName: t.DisplayName,
             PersonalityMarkdown: t.PersonalityMarkdown,
-            AuthOverrideJson: t.AuthOverrideJson));
+            AuthOverrideJson: t.AuthOverrideJson)
+        {
+            PersonaId = t.PersonaId
+        });
     }
 
     private void OnTopicInput(ChangeEventArgs e)
@@ -966,7 +977,7 @@
         var maxRounds = active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10;
         while (!state.StopRequested)
         {
-            while ((_userChatFocused || state.VotePending) && !state.StopRequested)
+            while ((state.UserChatFocused || state.VotePending) && !state.StopRequested)
                 await Task.Delay(50);
 
             round++;
@@ -987,7 +998,7 @@
                 if (resumeSkip.Contains(p.ParticipantId))
                     continue;
 
-                while ((_userChatFocused || state.VotePending) && !state.StopRequested)
+                while ((state.UserChatFocused || state.VotePending) && !state.StopRequested)
                     await Task.Delay(50);
 
                 state.CurrentSpeaker = p.ParticipantId;
@@ -1002,7 +1013,7 @@
                         state.PendingUserTurns.Clear();
                     }
 
-                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength);
+                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength, personaId: p.EffectivePersonaId);
 
                     // If the user injected a message while the API call was in-flight,
                     // discard the stale response and re-call so the participant can pivot.
@@ -1012,11 +1023,11 @@
                         state.PendingUserTurns.Clear();
 
                         // Wait for user to finish typing if still focused
-                        while (_userChatFocused && !state.StopRequested)
+                        while (state.UserChatFocused && !state.StopRequested)
                             await Task.Delay(50);
 
                         if (!state.StopRequested)
-                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength);
+                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength, personaId: p.EffectivePersonaId);
                     }
 
                     // Strip any participant-initiated vote request from the visible response
@@ -1197,13 +1208,13 @@
         ThinkTankService.Diagnostics -= OnDiagnostics;
     }
 
-    private void OnUserChatFocus() => _userChatFocused = true;
-    private void OnUserChatBlur() => _userChatFocused = false;
+    private void OnUserChatFocus() => ActiveState.UserChatFocused = true;
+    private void OnUserChatBlur() => ActiveState.UserChatFocused = false;
 
     private async Task ClearUserChat()
     {
         _userMessage = "";
-        _userChatFocused = false;
+        ActiveState.UserChatFocused = false;
         await JS.InvokeVoidAsync("ThinkTank.blurActive");
         await InvokeAsync(StateHasChanged);
     }
@@ -1228,7 +1239,7 @@
         if (e.Key == "Enter")
         {
             await SendUserMessage();
-            _userChatFocused = false;
+            ActiveState.UserChatFocused = false;
             await JS.InvokeVoidAsync("ThinkTank.blurActive");
         }
     }
@@ -1401,6 +1412,9 @@
         public bool Running { get; set; }
         public bool StopRequested { get; set; }
         public bool VotePending { get; set; }
+        /// <summary>True while the user has this conversation's chat input focused. Per-conversation
+        /// so typing in one tab pauses only that loop, not every running conversation.</summary>
+        public bool UserChatFocused { get; set; }
         public string? CurrentSpeaker { get; set; }
         public string? Error { get; set; }
         public int TotalTurns { get; set; }

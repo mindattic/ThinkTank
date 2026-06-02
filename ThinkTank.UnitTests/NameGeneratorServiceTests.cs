@@ -36,7 +36,8 @@ public class NameGeneratorServiceTests
 
         handler = new ScriptedHandler();
         var legion = new LegionClient(new HttpClient(handler));
-        var thinkTank = new ThinkTankService(legion, settings);
+        var psychometrics = new PsychometricProfileService(Path.Combine(Path.GetTempPath(), "tt-psy-" + Guid.NewGuid().ToString("N")));
+        var thinkTank = new ThinkTankService(legion, settings, psychometrics);
         sut = new NameGeneratorService(thinkTank, settings);
     }
 

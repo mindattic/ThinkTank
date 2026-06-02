@@ -58,7 +58,10 @@ public class ChatConversationsService
                         p.ProviderId,
                         p.DisplayName,
                         p.PersonalityMarkdown,
-                        p.AuthOverrideJson));
+                        p.AuthOverrideJson)
+                    {
+                        PersonaId = p.PersonaId
+                    });
                 }
 
                 Conversations.Add(convo);
@@ -145,7 +148,10 @@ public class ChatConversationsService
                 p.ProviderId,
                 p.DisplayName,
                 p.PersonalityMarkdown,
-                p.AuthOverrideJson)).ToList(),
+                p.AuthOverrideJson)
+            {
+                PersonaId = p.PersonaId
+            }).ToList(),
             Topic: c.Topic,
             Messages: c.Messages.Count == 0 ? null : new List<PersistedMessage>(c.Messages))
         {

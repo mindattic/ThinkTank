@@ -17,7 +17,7 @@ namespace ThinkTank.Core.Services;
 /// DI construction.
 /// </para>
 /// </summary>
-public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService settings, VotingConfiguration votingConfig)
+public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService settings, VotingConfiguration votingConfig, PsychometricProfileService psychometrics)
 {
     /// <summary>
     /// Polls every participant on <paramref name="question"/> using their existing
@@ -34,7 +34,7 @@ public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService 
     {
         RefreshVotingConfigFromSettings();
 
-        var voters = MapToVoterProfiles(participants);
+        var voters = MapToVoterProfilesWithPsychometrics(participants);
 
         var request = new VoteRequest
         {
@@ -92,6 +92,32 @@ public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService 
             PersonalityMarkdown = p.PersonalityMarkdown,
             ApiKeyOverride = ExtractField(p.AuthOverrideJson, "apiKey"),
             ModelOverride = ExtractField(p.AuthOverrideJson, "model")
+        }).ToList();
+
+    /// <summary>
+    /// Like <see cref="MapToVoterProfiles"/>, but additionally folds each persona's
+    /// psychometric profile into the vote: the prose brief is appended to
+    /// <see cref="VoterProfile.PersonalityMarkdown"/> (so the voter reasons in character),
+    /// and the raw <see cref="VoterProfile.Psychometrics"/> is set (so Legion's
+    /// <c>PsychometricVoteAnalysis</c> can segment the result by trait composition).
+    /// Personas without a scored profile are mapped exactly as before.
+    /// </summary>
+    public List<VoterProfile> MapToVoterProfilesWithPsychometrics(IEnumerable<ChatParticipant> participants)
+        => participants.Select(p =>
+        {
+            // Resolve the persona's profile once and render from it, rather than looking it
+            // up twice (once for the prose, once for the raw object).
+            var profile = psychometrics.GetProfile(p.EffectivePersonaId);
+            return new VoterProfile
+            {
+                VoterId = p.ParticipantId,
+                Name = p.DisplayName,
+                ProviderId = p.ProviderId,
+                PersonalityMarkdown = p.PersonalityMarkdown + PsychometricNarrator.Describe(profile),
+                ApiKeyOverride = ExtractField(p.AuthOverrideJson, "apiKey"),
+                ModelOverride = ExtractField(p.AuthOverrideJson, "model"),
+                Psychometrics = profile
+            };
         }).ToList();
 
     private static string? ExtractField(string? json, string field)

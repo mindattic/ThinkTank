@@ -220,7 +220,12 @@ public static class ChatStorage
 
                 var participantId = item.TryGetProperty("participantId", out var pid) ? pid.GetString() ?? "" : "";
                 var text = item.TryGetProperty("text", out var textElem) ? textElem.GetString() ?? "" : "";
-                var round = item.TryGetProperty("round", out var roundElem) ? roundElem.GetInt32() : 0;
+                // Guard the type: GetInt32() throws on a non-number (string/float/null) round,
+                // and this runs outside the per-line try/catch — one malformed value would
+                // otherwise abort the entire conversation reload instead of skipping the line.
+                var round = item.TryGetProperty("round", out var roundElem)
+                            && roundElem.ValueKind == JsonValueKind.Number
+                            && roundElem.TryGetInt32(out var r) ? r : 0;
                 var isError = item.TryGetProperty("isError", out var errElem) && errElem.ValueKind == JsonValueKind.True;
 
                 turns.Add(new PersistedTurn(participantId, text, round, isError));

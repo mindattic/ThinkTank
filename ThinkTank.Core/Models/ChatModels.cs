@@ -20,7 +20,17 @@ public record ParticipantTemplate(
     string DisplayName,
     string PersonalityMarkdown,
     string? AuthOverrideJson,
-    bool IsDefault = false);
+    bool IsDefault = false)
+{
+    /// <summary>
+    /// The MindAttic.Legion <c>Persona.Id</c> this template was sourced from (e.g.
+    /// <c>"default-claude"</c> or <c>"persona-0042"</c>), or <c>null</c> for hand-authored
+    /// custom templates with no library persona behind them. When present, it is the key
+    /// used to look up the persona's psychometric profile in Legion's <c>PersonaStore</c>
+    /// so the participant's traits can be injected into its system prompt.
+    /// </summary>
+    public string? PersonaId { get; init; }
+}
 
 /// <summary>
 /// An active participant in a specific conversation. Created by instantiating a
@@ -39,7 +49,28 @@ public record ChatParticipant(
     string ProviderId,
     string DisplayName,
     string PersonalityMarkdown,
-    string? AuthOverrideJson);
+    string? AuthOverrideJson)
+{
+    /// <summary>
+    /// The MindAttic.Legion <c>Persona.Id</c> this participant was instantiated from, or
+    /// <c>null</c> for hand-authored personalities. Carried so <see cref="ThinkTankService"/>
+    /// and <see cref="VotingService"/> can resolve and inject the persona's psychometric
+    /// profile (OCEAN/HEXACO/MBTI/Enneagram/DISC) into its prompt.
+    /// </summary>
+    public string? PersonaId { get; init; }
+
+    /// <summary>
+    /// The persona id to use for psychometric lookup: the explicit <see cref="PersonaId"/>
+    /// when set, otherwise derived from the <c>legion-{id}</c> <see cref="TemplateId"/>
+    /// convention used by library-sourced and default participants. This fallback lets
+    /// conversations persisted before <see cref="PersonaId"/> existed still resolve a profile.
+    /// Returns <c>null</c> for hand-authored participants with no library persona behind them.
+    /// </summary>
+    public string? EffectivePersonaId =>
+        !string.IsNullOrWhiteSpace(PersonaId) ? PersonaId
+        : TemplateId is { } t && t.StartsWith("legion-", StringComparison.Ordinal) ? t["legion-".Length..]
+        : null;
+}
 
 /// <summary>
 /// Represents a single conversation tab in the UI. Each conversation has its own topic,

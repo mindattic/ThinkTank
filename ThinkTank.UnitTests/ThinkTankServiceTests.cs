@@ -26,7 +26,9 @@ public class ThinkTankServiceTests
         }
 
         settings = new SettingsService();
-        sut = new ThinkTankService(new LegionClient(new HttpClient()), settings);
+        // Empty store dir → no scored profiles resolve, so prompt-content assertions stay stable.
+        var psychometrics = new PsychometricProfileService(Path.Combine(Path.GetTempPath(), "tt-psy-" + Guid.NewGuid().ToString("N")));
+        sut = new ThinkTankService(new LegionClient(new HttpClient()), settings, psychometrics);
     }
 
     // ── Models registry ─────────────────────────────────────────────────

@@ -40,11 +40,14 @@ public class NameGeneratorService
 
         var name = await thinkTank.CallProvider(providerId, personality, authOverrideJson, prompt, history);
 
+        // Take the first whitespace-delimited token so a chatty reply ("Sure, the name is Alex")
+        // doesn't get its words run together, then strip non-letters and cap length. Order matters:
+        // truncating the raw reply first could chop mid-sentence and concatenate garbage.
         name = (name ?? "").Trim();
+        var firstToken = name.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+        name = new string(firstToken.Where(char.IsLetter).ToArray());
         if (name.Length > 32)
             name = name[..32];
-
-        name = new string(name.Where(char.IsLetter).ToArray());
         if (string.IsNullOrWhiteSpace(name))
             name = "Alex";
 

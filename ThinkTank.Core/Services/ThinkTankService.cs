@@ -23,11 +23,13 @@ public class ThinkTankService
 {
     private readonly LegionClient legion;
     private readonly ThinkTankSettingsService settings;
+    private readonly PsychometricProfileService psychometrics;
 
-    public ThinkTankService(LegionClient legion, ThinkTankSettingsService settings)
+    public ThinkTankService(LegionClient legion, ThinkTankSettingsService settings, PsychometricProfileService psychometrics)
     {
         this.legion = legion;
         this.settings = settings;
+        this.psychometrics = psychometrics;
     }
 
     /// <summary>
@@ -109,17 +111,23 @@ public class ThinkTankService
         List<SharedTurn> history,
         int? maxTokensOverride = null,
         string? speakerId = null,
-        string? responseLength = null)
+        string? responseLength = null,
+        string? personaId = null)
     {
+        // Append the persona's psychometric brief (OCEAN/HEXACO/MBTI/Enneagram/DISC) when one
+        // has been scored for this persona, so the model embodies the measured traits. No-op
+        // when personaId is null (auxiliary callers) or the persona is unscored.
+        var persona = personalityMarkdown + psychometrics.DescribeForPrompt(personaId);
+
         // Claude fallback: route everyone through Anthropic with the original
         // provider's persona wrapped in a roleplay frame.
         var actualProviderId = providerId;
-        var actualPersona    = personalityMarkdown;
+        var actualPersona    = persona;
         var actualAuthOverride = authOverrideJson;
         if (settings.ClaudeFallbackMode && providerId != "claude")
         {
             actualProviderId   = "claude";
-            actualPersona      = WrapPersonaForClaudeFallback(providerId, personalityMarkdown);
+            actualPersona      = WrapPersonaForClaudeFallback(providerId, persona);
             actualAuthOverride = null;  // per-template override points at non-Claude key
         }
 

@@ -58,6 +58,11 @@ builder.Services.AddSingleton<AppearanceService>();
 builder.Services.AddSingleton<ChatConversationsService>();
 builder.Services.AddSingleton<HumanNameService>();
 builder.Services.AddSingleton<NameGeneratorService>();
+// Bridges to Legion's psychometric store (one JSON file per persona under
+// %APPDATA%/MindAttic/Legion/personas/). Resolves + caches each persona's trait profile and
+// renders it into the behavioral brief that ThinkTankService and VotingService inject into
+// system prompts. Default ctor uses Legion's standard store resolution.
+builder.Services.AddSingleton<PsychometricProfileService>(_ => new PsychometricProfileService());
 builder.Services.AddSingleton<ThinkTankService>();
 // VotingConfiguration is a long-lived singleton; VotingService.RefreshVotingConfigFromSettings
 // repopulates ApiKeys/ModelOverrides from SettingsService before every vote, so keys added or
