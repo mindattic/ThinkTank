@@ -57,7 +57,10 @@ perspective markdown. Loading degrades gracefully on missing files/fields. *(Gua
 
 ### {#TT-LAW-6} TT-LAW-6 — Diagnostics and committed files are secret-free
 API responses surfaced in the Diagnostics panel are redacted, and no real-looking provider key is
-ever committed to the repo. *(Guarded by `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`.)*
+ever committed to the repo. *(Design law; the guard test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`
+exists in `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` but is currently commented out
+— see [TT-A4](AMENDMENTS.md#TT-A4). Enforced by code review and `.gitignore`/`Settings.json`
+placement policy.)*
 
 ## 9. Glossary {#TT-§9}
 - **Participant** — one AI seat at the roundtable (`ChatParticipant`), instantiated from a
@@ -69,13 +72,13 @@ ever committed to the repo. *(Guarded by `ProviderAuthConfigs_ShouldNotContainRe
 - **Round** — one pass in which every participant speaks once.
 - **Shared turn** — one entry in the conversation log (`SharedTurn`) visible to all participants;
   a vote result is a synthetic shared turn.
-- **Vote** — a poll of every participant via Legion's `LLMVotingService`; types: consensus,
+- **Vote** — a poll of every participant via Legion's `LlmVotingService`; types: consensus,
   free-form, direction. Self-triggered by `[REQUEST_VOTE: question]`.
 - **Legion** — `MindAttic.Legion`, the provider-agnostic LLM dispatch + voting + persona library.
 - **Vault** — `MindAttic.Vault`, cloud-native credential resolution from `IConfiguration`.
 - **Vault overlay** — the runtime-only credential side map; never persisted ([TT-LAW-2](#TT-LAW-2)).
 
 ## Status index
-- done: 22  |  partial: 4  |  planned: 0  |  cut: 0
-- latest amendment: TT-A3 — LLMVoting integration shipped; auto-vote deferred (supersedes —) {#TT-A3}
+- done: 22  |  partial: 6  |  planned: 0  |  cut: 0
+- latest amendment: TT-A4 — No-secrets guard test disabled; law holds by policy (supersedes —) {#TT-A4}
 

@@ -100,8 +100,8 @@ Defined in `ThinkTank.Core/Models/`.
 - **`SharedTurn` / `ConversationMessage` / `LlmModel`** (`LlmModels.cs`) — the turn log a
   participant sees, a rendered message, and a catalog model entry.
 - **`ProviderAuthConfig`** (`ProviderAuthConfig.cs`) — `(ProviderId, Json)` auth blob.
-- **Persistence DTOs** (`PersistenceModels.cs`) — `PersistedConversation`, `PersistedMessage`,
-  `PersistedTurn`, `PersistedStatusEvent`.
+- **Persistence DTOs** (`PersistenceModels.cs`) — `PersistedConversation`, `PersistedParticipant`,
+  `PersistedMessage`, `PersistedTurn`, `PersistedStatusEvent`.
 - **`ChatLogEntry`** (`ChatLogModels.cs`), **`AppearanceMode`** (`AppearanceMode.cs`),
   **`ResponseLengthPreset`** (`ResponseLengthPreset.cs`).
 
@@ -111,7 +111,7 @@ Defined in `ThinkTank.Core/Services/`.
   personality markdown as the system prompt, trims to `MaxContextTurns`, sanitizes self-reference
   prefixes, emits redacted `Diagnostics`. Every model call goes via `LegionClient`.
 - **`VotingService`** — maps `ChatParticipant[]` → Legion `VoterProfile[]`
-  (`MapToVoterProfiles`), delegates to `LLMVotingService.VoteWithProfilesAsync`.
+  (`MapToVoterProfiles`), delegates to `LlmVotingService.VoteWithProfilesAsync`.
 - **`SettingsService`** + **`SettingsServiceVaultOverlay`** — persistence to
   `%LOCALAPPDATA%\MindAttic\ThinkTank\Settings.json` plus the Vault runtime-overlay credential
   resolution (`GetKeyForProvider` precedence).
@@ -161,7 +161,10 @@ perspective markdown. Loading degrades gracefully on missing files/fields. *(Gua
 
 ### {#TT-LAW-6} TT-LAW-6 — Diagnostics and committed files are secret-free
 API responses surfaced in the Diagnostics panel are redacted, and no real-looking provider key is
-ever committed to the repo. *(Guarded by `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`.)*
+ever committed to the repo. *(Design law; the guard test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`
+exists in `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` but is currently commented out
+— see [TT-A4](AMENDMENTS.md#TT-A4). Enforced by code review and `.gitignore`/`Settings.json`
+placement policy.)*
 
 ## 6. Verified state {#TT-§6}
 **Build:** `dotnet build` / `dotnet test` on .NET 10 SDK `10.0.300` — clean.
@@ -173,13 +176,16 @@ Proven working (test-backed): multi-provider dispatch routing through Legion; pr
 sanitization; history trimming; the Vault credential overlay + precedence; `ChatParticipant`→
 `VoterProfile` mapping; `[REQUEST_VOTE:]` marker parsing/stripping; conversation persistence +
 turn replay; the 18-theme appearance service with clamping; psychometric profile rendering;
-Razor component rendering (Home, NavMenu, NotFound, ConfirmationDialog, SettingsAppearance);
-no-secrets-committed guard.
+Razor component rendering (Home, NavMenu, NotFound, ConfirmationDialog, SettingsAppearance).
 
 Not yet test-proven (UI-only / e2e): the live round loop, user chat injection, title generation,
 and provider connectivity polling are exercised by Cypress specs (`navigation`, `settings`,
 `chat`, `vote-dialog`) which require a running dev server and are not part of the unit run — see
 [USER_STORIES.md](USER_STORIES.md) priority backlog.
+
+**Note (2026-06-07 sync):** The no-secrets-committed guard test
+(`ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`) is present in the test file
+but commented out; TT-US-E3 is therefore downgraded to 🟡. See [TT-A4](AMENDMENTS.md#TT-A4).
 
 ## 7. Active frontier {#TT-§7}
 - **RFC [0001](rfc/0001-auto-vote-after-n-rounds.md)** — auto-vote after N rounds of no
@@ -205,7 +211,7 @@ routes through Legion ([TT-LAW-1](#TT-LAW-1)). Docs mark `✅` only with that ev
 - **Round** — one pass in which every participant speaks once.
 - **Shared turn** — one entry in the conversation log (`SharedTurn`) visible to all participants;
   a vote result is a synthetic shared turn.
-- **Vote** — a poll of every participant via Legion's `LLMVotingService`; types: consensus,
+- **Vote** — a poll of every participant via Legion's `LlmVotingService`; types: consensus,
   free-form, direction. Self-triggered by `[REQUEST_VOTE: question]`.
 - **Legion** — `MindAttic.Legion`, the provider-agnostic LLM dispatch + voting + persona library.
 - **Vault** — `MindAttic.Vault`, cloud-native credential resolution from `IConfiguration`.

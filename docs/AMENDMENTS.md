@@ -29,8 +29,18 @@ preserved in `.claude/settings.local.json`.)
 ## TT-A3 — LLMVoting integration shipped; auto-vote deferred (supersedes —) {#TT-A3}
 **What changed:** the planned LLMVoting integration (repo `CLAUDE.md` "Planned Feature") shipped as
 Epic C — manual `Call Vote` plus participant-triggered `[REQUEST_VOTE: question]`, routed through
-Legion's `LLMVotingService`. Vote types: consensus, free-form, direction.
+Legion's `LlmVotingService`. Vote types: consensus, free-form, direction.
 **Why:** break circular debates with a decision injected back into shared history
 ([TT-LAW-4](BIBLE.md#TT-LAW-4)).
 **Migration:** none. Auto-vote-after-N-rounds remains out of scope — tracked in
 RFC [0001](rfc/0001-auto-vote-after-n-rounds.md).
+
+## TT-A4 — No-secrets guard test disabled; law holds by policy (supersedes —) {#TT-A4}
+**What changed:** `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
+`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` is entirely commented out and does not
+run as part of the unit suite. TT-US-E3 is therefore downgraded ✅ → 🟡. The law ([TT-LAW-6](BIBLE.md#TT-LAW-6))
+still holds by design: provider auth lives under `%LOCALAPPDATA%` (outside the repo), `Settings.json`
+is excluded from git, and no real-looking key appears in any tracked file.
+**Why discovered:** 2026-06-07 full-sync code audit.
+**Migration:** re-enable and fix the test to restore ✅ on TT-US-E3 (see priority backlog item 3 in
+[USER_STORIES.md](USER_STORIES.md)).
