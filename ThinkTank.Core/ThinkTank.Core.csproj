@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="MindAttic.Legion" Version="3.0.0" />
+        <PackageReference Include="MindAttic.Legion" Version="5.0.0" />
         <PackageReference Include="MindAttic.Vault" Version="1.0.0" />
     </ItemGroup>
 
