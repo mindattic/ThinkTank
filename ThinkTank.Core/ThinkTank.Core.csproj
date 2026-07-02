@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="MindAttic.Legion" Version="7.0.0" />
+        <PackageReference Include="MindAttic.Legion" Version="12.0.0" />
         <PackageReference Include="MindAttic.Vault" Version="1.0.0" />
     </ItemGroup>
 
