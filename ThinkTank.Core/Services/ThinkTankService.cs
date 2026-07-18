@@ -43,18 +43,26 @@ public class ThinkTankService
         ["deepseek"]   = ("◉", "You are DeepSeek, made by DeepSeek AI. You are in a live roundtable with other AI systems. Read what they said and engage directly. Be precise and insightful. 2-3 sentences max."),
     };
 
+    // Legion 11+ split "claude" into "claude-api" and "claude-team". ThinkTank exposes
+    // a single "claude" seat and routes through "claude-api". These helpers translate at
+    // the catalog boundary only — internal IDs, ProviderAuth keys, and ClaudeFallbackMode
+    // all continue to use "claude".
+    private static string ToThinkTankId(string catalogId) => catalogId == "claude-api" ? "claude" : catalogId;
+    private static string ToCatalogId(string thinkTankId) => thinkTankId == "claude" ? "claude-api" : thinkTankId;
+
     /// <summary>
     /// Registry of all supported LLM providers, sourced from Legion's catalog
     /// (display names + key URLs) with ThinkTank's avatar + roundtable persona overlaid.
     /// </summary>
     public List<LlmModel> Models { get; } = LlmProviderCatalog.Default
-        .Where(p => RoundtableDecorations.ContainsKey(p.Id))
+        .Where(p => RoundtableDecorations.ContainsKey(ToThinkTankId(p.Id)))
         .Select(p =>
         {
-            var (avatar, personality) = RoundtableDecorations[p.Id];
+            var ttId = ToThinkTankId(p.Id);
+            var (avatar, personality) = RoundtableDecorations[ttId];
             return new LlmModel
             {
-                Id          = p.Id,
+                Id          = ttId,
                 Name        = p.DisplayName,
                 Avatar      = avatar,
                 ApiKeyUrl   = p.KeysUrl,
@@ -131,7 +139,7 @@ public class ThinkTankService
             actualAuthOverride = null;  // per-template override points at non-Claude key
         }
 
-        var providerInfo = LlmProviderCatalog.Get(actualProviderId);
+        var providerInfo = LlmProviderCatalog.Get(ToCatalogId(actualProviderId));
         if (providerInfo is null)
             throw new ArgumentException($"Unknown provider: {actualProviderId}");
 

@@ -199,19 +199,29 @@ public class ThinkTankSettingsService
     /// Template/persona ids keep the historical <c>default-&lt;provider&gt;</c> shape so
     /// existing settings files continue to resolve.
     /// </summary>
+    // Legion 11+ uses "claude-api" and "claude-team" where older versions used "claude".
+    // ThinkTank exposes a single "claude" seat backed by "claude-api"; translate at the
+    // catalog boundary so internal IDs and persisted settings stay as "claude".
+    private static string ToThinkTankId(string catalogId) => catalogId == "claude-api" ? "claude" : catalogId;
+
     private static List<ParticipantTemplate> CreateDefaultTemplates()
     {
         var allowedProviders = LlmProviderCatalog.DefaultIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var result = new List<ParticipantTemplate>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var provider in LlmProviderCatalog.All)
         {
             if (!allowedProviders.Contains(provider.Id))
                 continue;
 
-            var personaId = $"default-{provider.Id}";
+            var ttId = ToThinkTankId(provider.Id);
+            if (!seen.Add(ttId))
+                continue;  // skip "claude-team" — ThinkTank exposes one Claude seat
+
+            var personaId = $"default-{ttId}";
             result.Add(new ParticipantTemplate(
                 TemplateId: $"legion-{personaId}",
-                ProviderId: provider.Id,
+                ProviderId: ttId,
                 DisplayName: provider.DisplayName,
                 PersonalityMarkdown: "",
                 AuthOverrideJson: null,
