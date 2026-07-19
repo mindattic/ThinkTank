@@ -283,10 +283,11 @@ public class ThinkTankSettingsService
             // Seed missing ProviderAuth entries for new providers
             var defaultAuths = new Dictionary<string, string>
             {
-                ["openai"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}",
-                ["claude"] = "{\n  \"type\": \"anthropic\",\n  \"apiKey\": \"\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"maxTokens\": 2048\n}",
-                ["gemini"] = "{\n  \"type\": \"google\",\n  \"apiKey\": \"\",\n  \"model\": \"gemini-2.5-flash\",\n  \"maxTokens\": 2048\n}",
-                ["deepseek"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-chat\",\n  \"maxTokens\": 2048\n}"
+                ["openai"]   = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"gpt-5.4-mini\",\n  \"maxTokens\": 2048\n}",
+                ["claude"]   = "{\n  \"type\": \"anthropic\",\n  \"apiKey\": \"\",\n  \"model\": \"claude-sonnet-5\",\n  \"maxTokens\": 2048\n}",
+                ["gemini"]   = "{\n  \"type\": \"google\",\n  \"apiKey\": \"\",\n  \"model\": \"gemini-3.5-flash\",\n  \"maxTokens\": 2048\n}",
+                ["deepseek"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-v4-flash\",\n  \"maxTokens\": 2048\n}",
+                ["kimi"]     = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"kimi-k2\",\n  \"maxTokens\": 2048\n}"
             };
 
             foreach (var (providerId, defaultJson) in defaultAuths)

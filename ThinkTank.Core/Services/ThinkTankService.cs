@@ -169,7 +169,7 @@ public class ThinkTankService
         try
         {
             var raw = await legion.CallChatAsync(
-                providerId: actualProviderId,
+                providerId: ToCatalogId(actualProviderId),
                 apiKey: apiKey,
                 model: model,
                 messages: turns,

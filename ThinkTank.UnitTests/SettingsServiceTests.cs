@@ -96,15 +96,16 @@ public class SettingsServiceTests
     // ── ProviderAuth initialization ─────────────────────────────────────
 
     [Test]
-    public void ProviderAuth_Has4Providers()
+    public void ProviderAuth_Has5Providers()
     {
-        Assert.That(sut.ProviderAuth.Count, Is.EqualTo(4));
+        Assert.That(sut.ProviderAuth.Count, Is.EqualTo(5));
     }
 
     [TestCase("openai")]
     [TestCase("claude")]
     [TestCase("gemini")]
     [TestCase("deepseek")]
+    [TestCase("kimi")]
     public void ProviderAuth_ContainsExpectedProvider(string providerId)
     {
         Assert.That(sut.ProviderAuth.ContainsKey(providerId), Is.True);
