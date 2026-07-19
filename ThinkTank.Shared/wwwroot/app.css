@@ -315,7 +315,7 @@ main {
 /* Think Tank status log tabs */
 .status-log-tabs {
     display: inline-flex;
-    gap: var(--gutter);
+    gap: calc(var(--gutter) / 2);
 }
 
 .status-log-tab {
@@ -932,7 +932,7 @@ html, body {
 
 .chat-tabs {
     display: flex;
-    gap: 0.5rem;
+    gap: calc(var(--gutter) / 2);
     flex-wrap: wrap;
     margin-bottom: 1rem;
 }
@@ -1356,8 +1356,8 @@ html, body {
 .conversation-grid {
     display: grid;
     grid-template-columns: 220px 1fr;
-    gap: 0.9rem;
-    margin-top: 0.75rem;
+    gap: var(--gutter);
+    margin-top: var(--gutter);
 }
 
 @media (max-width: 900px) {
@@ -1788,7 +1788,7 @@ html, body {
 .settings-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: var(--gutter);
     align-items: start;
 }
 
@@ -1806,8 +1806,8 @@ html, body {
 
 .settings-tabs {
     display: flex;
-    gap: 0.25rem;
-    padding: 0.75rem;
+    gap: calc(var(--gutter) / 2);
+    padding: var(--gutter);
     border-bottom: none;
     background: rgba(0,0,0,0.15);
     flex-wrap: wrap;
