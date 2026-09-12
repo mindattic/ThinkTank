@@ -1,5 +1,7 @@
 using ThinkTank.Core.Models;
 using MindAttic.Legion;
+using MindAttic.Vault.Credentials;
+using MindAttic.Vault.Paths;
 
 namespace ThinkTank.Core.Services;
 
@@ -663,10 +665,24 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Resolves the API key for a provider. Keys are NOT stored in-app — they come from
-    /// MindAttic.Vault: an explicit per-call override (used by per-persona auth overrides),
-    /// otherwise the runtime value resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
-    /// (User Secrets / env / App Service / Key Vault → the shared providers.json) via
+    /// Fresh <see cref="AppScopedCredentialStore"/> over the shared LLM keyring, namespaced under
+    /// <c>"thinktank-"</c>. Constructed per call (not cached) so it re-resolves
+    /// <c>MINDATTIC_LLM_CREDENTIALS</c> on every access — required by the test harness, which
+    /// redirects that env var to a per-run sandbox in <see cref="TestAssemblySetup"/>-style fixtures.
+    /// </summary>
+    private static AppScopedCredentialStore OwnProviderStore() => new(
+        "thinktank",
+        new LlmCredentialStore(
+            Environment.GetEnvironmentVariable(LlmCredentialStore.DirectoryEnvVar)
+            ?? VaultPaths.RoamingBucket(LlmCredentialStore.Bucket)));
+
+    /// <summary>
+    /// Resolves the API key for a provider. Keys are NOT stored in <c>Settings.json</c> — in
+    /// priority order: an explicit per-call override (used by per-persona auth overrides), then
+    /// THIS APP's own Vault-backed key (<see cref="OwnProviderStore"/> — checked live, so
+    /// saving one in Settings takes effect immediately with no restart), then the runtime value
+    /// resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/> (User Secrets
+    /// / env / App Service / Key Vault → the shared providers.json) via
     /// <see cref="RuntimeApiKeyOverrides"/>, populated by
     /// <see cref="SettingsServiceVaultOverlay.OverlayFromConfiguration"/>.
     /// </summary>
@@ -675,12 +691,31 @@ public class ThinkTankSettingsService
         if (!string.IsNullOrWhiteSpace(apiKeyOverride))
             return apiKeyOverride;
 
+        var ownKey = OwnProviderStore().GetKey(providerId);
+        if (!string.IsNullOrWhiteSpace(ownKey))
+            return ownKey;
+
         if (RuntimeApiKeyOverrides.TryGetValue(providerId, out var runtimeKey)
             && !string.IsNullOrWhiteSpace(runtimeKey))
             return runtimeKey;
 
         return "";
     }
+
+    /// <summary>
+    /// Saves this app's own Vault-backed override for <paramref name="providerId"/>'s key —
+    /// written under this app's own scoped id (see <see cref="OwnProviderStore"/>), never the
+    /// shared cross-app id, so entering a key here never changes what another MindAttic app
+    /// resolves. Never touches <c>Settings.json</c>. Pass an empty string to clear it and fall
+    /// back to the shared default.
+    /// </summary>
+    public void SetProviderKey(string providerId, string apiKey)
+        => OwnProviderStore().SetKey(providerId, apiKey ?? "");
+
+    /// <summary>True if this app has its own Vault-backed override for <paramref name="providerId"/>
+    /// (as opposed to falling back to the shared cross-app default).</summary>
+    public bool HasOwnProviderKey(string providerId)
+        => !string.IsNullOrWhiteSpace(OwnProviderStore().GetKey(providerId));
 
     /// <summary>
     /// Builds an auth-config JSON object using <see cref="System.Text.Json.JsonSerializer"/>

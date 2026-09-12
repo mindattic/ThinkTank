@@ -77,14 +77,25 @@
                         personality prompt. Only the Claude API key is used.
                     </p>
 
-                    <p style="margin-top:1.25rem;"><strong>API keys (managed in MindAttic Vault)</strong></p>
+                    <p style="margin-top:1.25rem;"><strong>API keys</strong></p>
                     <p class="options-hint" style="margin-top:0;">
-                        Keys are read from MindAttic Vault — User Secrets, environment / App Service, or the
-                        shared file <code>@SharedCredentialsPath</code> (in that order). There is no in-app key entry.
+                        Bring your own key for any provider below — it's used by ThinkTank only and never
+                        changes what another MindAttic application resolves. Leave a field blank to fall back
+                        to the shared default, if one is configured on this machine (User Secrets, environment
+                        / App Service, or the shared file <code>@SharedCredentialsPath</code>).
                     </p>
-                    <p class="options-hint" style="margin-top:-0.25rem;">
-                        Set or rotate a key once in Vault and every MindAttic application picks it up.
-                    </p>
+                    @foreach (var p in ProviderOptions)
+                    {
+                        <div class="settings-row" style="margin-top:0.5rem; align-items:center; gap:0.5rem;">
+                            <label for="@("provider-key-" + p.Id)" style="min-width:6rem;">@p.Name</label>
+                            <input id="@("provider-key-" + p.Id)" type="password" style="flex:1;"
+                                   value="@GetProviderKeyInput(p.Id)"
+                                   @oninput="@(e => SetProviderKeyInput(p.Id, e.Value?.ToString() ?? ""))"
+                                   placeholder="@(ThinkTankSettings.HasOwnProviderKey(p.Id) ? "Configured — leave blank to keep" : "Not configured")" />
+                            <button class="start-btn" @onclick="@(() => SaveProviderKey(p.Id))">Save</button>
+                            <button class="reset-btn" @onclick="@(() => ClearProviderKey(p.Id))">Clear</button>
+                        </div>
+                    }
                 </div>
             }
             else if (_activeSection == SettingsSection.Appearance)
@@ -261,6 +272,28 @@
     }
 
     private string SharedCredentialsPath => MindAtticCredentialStore.ProvidersFilePath;
+
+    private readonly Dictionary<string, string> _providerKeyInputs = new();
+
+    private string GetProviderKeyInput(string providerId)
+        => _providerKeyInputs.TryGetValue(providerId, out var v) ? v : "";
+
+    private void SetProviderKeyInput(string providerId, string value)
+        => _providerKeyInputs[providerId] = value;
+
+    private void SaveProviderKey(string providerId)
+    {
+        var value = GetProviderKeyInput(providerId);
+        if (string.IsNullOrWhiteSpace(value)) return;
+        ThinkTankSettings.SetProviderKey(providerId, value);
+        _providerKeyInputs[providerId] = ""; // never left sitting in the field once saved
+    }
+
+    private void ClearProviderKey(string providerId)
+    {
+        ThinkTankSettings.SetProviderKey(providerId, "");
+        _providerKeyInputs[providerId] = "";
+    }
 
     private async Task AddCustomPersona()
     {
