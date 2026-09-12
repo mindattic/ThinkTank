@@ -32,6 +32,11 @@ public static class SettingsServiceVaultOverlay
     /// record the trimmed value into <see cref="ThinkTankSettingsService.RuntimeApiKeyOverrides"/>.
     /// The on-disk JSON is left untouched.
     /// </summary>
+    /// <remarks>
+    /// For <c>"claude"</c> specifically, also checks <c>"claude-api"</c> — Automata's (and
+    /// MindAttic.Legion's) id for the same shared key — when ThinkTank's own <c>"claude"</c> entry
+    /// is empty, so a shared key set via either app's convention is recognized here.
+    /// </remarks>
     public static void OverlayFromConfiguration(this ThinkTankSettingsService self, IConfiguration config)
     {
         if (self is null) throw new ArgumentNullException(nameof(self));
@@ -43,6 +48,8 @@ public static class SettingsServiceVaultOverlay
         foreach (var providerId in self.ProviderAuth.Keys.ToList())
         {
             var key = bucket[$"{providerId}:{VaultConfigurationKeys.ApiKeyProperty}"];
+            if (string.IsNullOrWhiteSpace(key) && providerId == "claude")
+                key = bucket[$"claude-api:{VaultConfigurationKeys.ApiKeyProperty}"];
             if (string.IsNullOrWhiteSpace(key)) continue;
 
             self.RuntimeApiKeyOverrides[providerId] = key.Trim();
