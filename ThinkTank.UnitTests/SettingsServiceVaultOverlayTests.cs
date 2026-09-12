@@ -94,37 +94,6 @@ public class SettingsServiceVaultOverlayTests
     }
 
     [Test]
-    public void OverlayFromConfiguration_ClaudeApiAlias_FillsRuntimeOverride_WhenClaudeEntryEmpty()
-    {
-        // "claude-api" is Automata's (and MindAttic.Legion's) id for the same shared key
-        // ThinkTank stores under "claude" — a shared key set via either convention must
-        // be recognized here too.
-        var config = BuildVaultConfig(new Dictionary<string, string?>
-        {
-            ["claude-api"] = "sk-vault-claude-api"
-        });
-
-        sut.OverlayFromConfiguration(config);
-
-        Assert.That(sut.RuntimeApiKeyOverrides.TryGetValue("claude", out var key), Is.True);
-        Assert.That(key, Is.EqualTo("sk-vault-claude-api"));
-    }
-
-    [Test]
-    public void OverlayFromConfiguration_PrefersClaudeEntry_OverTheClaudeApiAlias()
-    {
-        var config = BuildVaultConfig(new Dictionary<string, string?>
-        {
-            ["claude"]     = "sk-vault-claude",
-            ["claude-api"] = "sk-vault-claude-api",
-        });
-
-        sut.OverlayFromConfiguration(config);
-
-        Assert.That(sut.RuntimeApiKeyOverrides["claude"], Is.EqualTo("sk-vault-claude"));
-    }
-
-    [Test]
     public void OverlayFromConfiguration_DoesNotMutateProviderAuth()
     {
         var originalJson = sut.ProviderAuth["openai"].Json;
