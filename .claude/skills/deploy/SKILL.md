@@ -16,4 +16,4 @@ Report the result. Today this prints the "disabled" note and exits 0. To enable:
 4. Flip `apps[].disabled` from `true` to `false` in `MindAttic.Deploy/projects.json`.
 
 Notes:
-- The README-driven landing page (`mindattic.com/thinktank.htm`) that the legacy `scripts/cli/deploy.{bat,ps1}` + `build-html.js` used to ship -- and later MindAttic.Deploy's catalog mode (`--only thinktank`) -- is retired (MindAttic.Deploy DEP-A6, 2026-10-03). This repo's README on GitHub (https://github.com/mindattic/ThinkTank) is the project page. This `/deploy` command is for the APP only.
+- There is no landing page: mindattic.com has no ThinkTank page and MindAttic.Deploy rejects `--only thinktank`. This repo's README on GitHub (https://github.com/mindattic/ThinkTank) is the project page. This `/deploy` command is for the APP only.

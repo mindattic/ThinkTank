@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Cloud-native configuration chain. Layered so existing dev workflows keep working:
 //   - AddJsonFile (already added by WebApplicationBuilder for appsettings.json).
 //   - AddMindAtticVaultFiles surfaces %APPDATA%\MindAttic\LLM\providers.json on dev machines
-//     — the single credential source now that .NET User Secrets is retired. ProviderDefaults:*
+//     — the single credential source (.NET User Secrets is not used). ProviderDefaults:*
 //     keys come from appsettings.json (the shared store never held them), so the factory
 //     below keeps working unchanged.
 //   - AddEnvironmentVariables (already present) picks up App Service Application Settings

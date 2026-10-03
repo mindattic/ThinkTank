@@ -17,8 +17,10 @@ MindAttic.Legion, no vendor lock-in.
   written back to `Settings.json` or the shared `%APPDATA%\MindAttic\LLM\providers.json`.
 - **NOT a multi-user/auth product (yet).** It is single-host shared global state; there are no
   accounts. MindAttic.Authentication ([HOUSE-LAW-7]) is not adopted.
-- **NOT a desktop/MAUI app anymore.** The MAUI shell was retired; the host is the Blazor Server
-  web app only (see [TT-A1](AMENDMENTS.md#TT-A1)).
+- **NOT a desktop/native app.** There is no MAUI shell, installer, or native binary; the only host
+  is the Blazor Server web app (`ThinkTank.Blazor`), so it runs locally, on a LAN, or on Azure.
+- **NOT an adversarial "arena".** The framing is a roundtable of advisors converging on a decision;
+  the product is always called "Think Tank".
 
 ## 5. The Laws {#TT-§5}
 Think Tank **inherits all org-wide laws** from `../MindAttic.HouseRules.md` by reference — do not
@@ -51,16 +53,18 @@ which is stripped from the visible response. *(Guarded by the `VoteMarkerTests` 
 
 ### {#TT-LAW-5} TT-LAW-5 — Persistence must fully reconstruct a conversation
 Everything needed to recreate a conversation after restart is persisted: tabs/participants in
-`Settings.json`, the append-only turn log in `Conversations/<chatId>/chat.json`, and per-participant
-perspective markdown. Loading degrades gracefully on missing files/fields. *(Guarded by the
+`Settings.json`, the append-only turn log in `Conversations/<chatId>/chat.jsonl` (a `chat.json`
+array file is converted to `chat.jsonl` on first read or append), and per-participant perspective
+markdown. Loading degrades gracefully on missing files/fields. *(Guarded by the
 `LoadTurnsAsync_*` and `ChatStorage` families.)*
 
 ### {#TT-LAW-6} TT-LAW-6 — Diagnostics and committed files are secret-free
 API responses surfaced in the Diagnostics panel are redacted, and no real-looking provider key is
-ever committed to the repo. *(Design law; the guard test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`
-exists in `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` but is currently commented out
-— see [TT-A4](AMENDMENTS.md#TT-A4). Enforced by code review and `.gitignore`/`Settings.json`
-placement policy.)*
+ever committed to the repo. *(Enforced by policy, not a running test: provider auth lives in
+`Settings.json` under `%LOCALAPPDATA%` (outside the repo), `.gitignore`, and code review. The guard
+test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
+`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` is commented out; re-enabling it is backlog
+item 3 in [USER_STORIES.md](USER_STORIES.md).)*
 
 ## 9. Glossary {#TT-§9}
 - **Participant** — one AI seat at the roundtable (`ChatParticipant`), instantiated from a
@@ -79,6 +83,5 @@ placement policy.)*
 - **Vault overlay** — the runtime-only credential side map; never persisted ([TT-LAW-2](#TT-LAW-2)).
 
 ## Status index
-- done: 22  |  partial: 6  |  planned: 0  |  cut: 0
-- latest amendment: TT-A4 — No-secrets guard test disabled; law holds by policy (supersedes —) {#TT-A4}
+- done: 22  |  partial: 6  |  planned: 0
 

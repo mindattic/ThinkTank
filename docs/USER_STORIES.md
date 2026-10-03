@@ -4,13 +4,12 @@ project: Think Tank
 code: TT
 layer: stories
 status: living
-updated: 2026-06-07
+updated: 2026-10-03
 ---
 
 # Think Tank — User Stories
-> ✅ done (shipped & tested) · 🟡 partial · ⬜ planned · 🗑️ cut. Every ✅ cites the test.
+> ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test.
 > Status evidence: `dotnet test ThinkTank.UnitTests` → 293 passed / 0 failed (2026-06-07).
-> Full-sync 2026-06-07: TT-US-E3 downgraded (done→partial; guard test commented out); see TT-A4.
 
 ## Epic A — Roundtable orchestration
 - **TT-US-A1 ✅** As a user, I can dispatch every participant's turn through one provider-agnostic
@@ -83,7 +82,7 @@ updated: 2026-06-07
 - **TT-US-E3 🟡** As a developer, no real-looking key is ever committed to the repo. *(guard test
   `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` exists but is commented out in
   `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` — law is enforced by policy, not a
-  running assertion; see [TT-A4](../docs/AMENDMENTS.md#TT-A4).)*
+  running assertion; see [TT-LAW-6](BIBLE.md#TT-LAW-6).)*
 
 ## Epic F — Appearance
 - **TT-US-F1 ✅** As a user, I can pick any of 18 themes and it persists, falling back to dark on an
@@ -104,16 +103,3 @@ updated: 2026-06-07
    into [TT-§7](BIBLE.md#TT-§7) and a new Epic C story.
 5. **⬜ Title generation** verification (currently background UI logic, untested in the unit run).
 6. **⬜ Provider connectivity polling** assertion.
-
-### Audit log
-No story has been changed since its original ask; the LLMVoting integration plan recorded in the
-repo `CLAUDE.md` "Planned Feature" section graduated as shipped Epic C (manual + marker-triggered
-voting), with auto-vote explicitly deferred to RFC 0001 — matching that plan's stated
-"Out of Scope (follow-on): Auto-vote after N rounds" (original spec — audit log).
-
-**2026-06-07 full-sync:** TT-US-E3 downgraded (done → partial). Original ask preserved: "As a
-developer, no real-looking key is ever committed to the repo." The guard test
-`ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` exists in
-`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` but is entirely commented out and does
-not run. Law TT-LAW-6 still holds by design (Settings.json in LocalAppData, .gitignore, code
-review) — re-enabling the test would restore the story to done.

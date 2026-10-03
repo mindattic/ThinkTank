@@ -4,7 +4,7 @@ project: Think Tank
 code: TT
 layer: bible
 status: living
-updated: 2026-06-07
+updated: 2026-10-03
 ---
 
 # Think Tank — Project Bible
@@ -17,8 +17,9 @@ vote on a topic in a single browser-native roundtable — every model call route
 MindAttic.Legion, no vendor lock-in.
 
 ## 2. The product promise {#TT-§2}
-- **Multi-provider out of the box.** 11 providers (OpenAI, Anthropic, Google, DeepSeek, Mistral,
-  xAI, Groq, Together AI, OpenRouter, Fireworks, Cohere), one UI, zero glue code. Think Tank
+- **Multi-provider out of the box.** Seats and voting use Legion's default first-party provider set
+  (`LlmProviderCatalog.DefaultIds`: Claude, ChatGPT/OpenAI, Gemini, DeepSeek), one UI, zero glue
+  code. Legion's catalog knows more providers, but Think Tank does not surface them. Think Tank
   never holds an HTTP endpoint — dispatch leaves through [TT-LAW-1](#TT-LAW-1).
 - **Personalities, not prompts.** Each participant is a markdown persona (optionally backed by a
   Legion library persona with a psychometric profile), assignable per seat, AI-generatable.
@@ -37,8 +38,10 @@ MindAttic.Legion, no vendor lock-in.
   written back to `Settings.json` or the shared `%APPDATA%\MindAttic\LLM\providers.json`.
 - **NOT a multi-user/auth product (yet).** It is single-host shared global state; there are no
   accounts. MindAttic.Authentication ([HOUSE-LAW-7]) is not adopted.
-- **NOT a desktop/MAUI app anymore.** The MAUI shell was retired; the host is the Blazor Server
-  web app only (see [TT-A1](AMENDMENTS.md#TT-A1)).
+- **NOT a desktop/native app.** There is no MAUI shell, installer, or native binary; the only host
+  is the Blazor Server web app (`ThinkTank.Blazor`), so it runs locally, on a LAN, or on Azure.
+- **NOT an adversarial "arena".** The framing is a roundtable of advisors converging on a decision;
+  the product is always called "Think Tank".
 
 ## 4. Architecture canon {#TT-§4}
 
@@ -69,10 +72,9 @@ MindAttic.Legion, no vendor lock-in.
                   |  PersonaStore            |
                   +-------------+------------+
                                 |
-            +-------------------+-------------------+
-            v                   v                   v
-        OpenAI            Anthropic            ... 9 more
-       (ChatGPT)            (Claude)             providers
+            +-------------+-----+-------+-------------+
+            v             v             v             v
+         Claude        ChatGPT       Gemini       DeepSeek
 ```
 
 All services are registered as **singletons** in `ThinkTank.Blazor/Program.cs` for shared global
@@ -155,16 +157,18 @@ which is stripped from the visible response. *(Guarded by the `VoteMarkerTests` 
 
 ### {#TT-LAW-5} TT-LAW-5 — Persistence must fully reconstruct a conversation
 Everything needed to recreate a conversation after restart is persisted: tabs/participants in
-`Settings.json`, the append-only turn log in `Conversations/<chatId>/chat.json`, and per-participant
-perspective markdown. Loading degrades gracefully on missing files/fields. *(Guarded by the
+`Settings.json`, the append-only turn log in `Conversations/<chatId>/chat.jsonl` (a `chat.json`
+array file is converted to `chat.jsonl` on first read or append), and per-participant perspective
+markdown. Loading degrades gracefully on missing files/fields. *(Guarded by the
 `LoadTurnsAsync_*` and `ChatStorage` families.)*
 
 ### {#TT-LAW-6} TT-LAW-6 — Diagnostics and committed files are secret-free
 API responses surfaced in the Diagnostics panel are redacted, and no real-looking provider key is
-ever committed to the repo. *(Design law; the guard test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`
-exists in `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` but is currently commented out
-— see [TT-A4](AMENDMENTS.md#TT-A4). Enforced by code review and `.gitignore`/`Settings.json`
-placement policy.)*
+ever committed to the repo. *(Enforced by policy, not a running test: provider auth lives in
+`Settings.json` under `%LOCALAPPDATA%` (outside the repo), `.gitignore`, and code review. The guard
+test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
+`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` is commented out; re-enabling it is backlog
+item 3 in [USER_STORIES.md](USER_STORIES.md).)*
 
 ## 6. Verified state {#TT-§6}
 **Build:** `dotnet build` / `dotnet test` on .NET 10 SDK `10.0.300` — clean.
@@ -181,15 +185,13 @@ Razor component rendering (Home, NavMenu, NotFound, ConfirmationDialog, Settings
 Not yet test-proven (UI-only / e2e): the live round loop, user chat injection, title generation,
 and provider connectivity polling are exercised by Cypress specs (`navigation`, `settings`,
 `chat`, `vote-dialog`) which require a running dev server and are not part of the unit run — see
-[USER_STORIES.md](USER_STORIES.md) priority backlog.
-
-**Note (2026-06-07 sync):** The no-secrets-committed guard test
-(`ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`) is present in the test file
-but commented out; TT-US-E3 is therefore downgraded to 🟡. See [TT-A4](AMENDMENTS.md#TT-A4).
+[USER_STORIES.md](USER_STORIES.md) priority backlog. The no-secrets guard test is commented out, so
+TT-US-E3 is 🟡 ([TT-LAW-6](#TT-LAW-6)).
 
 ## 7. Active frontier {#TT-§7}
 - **RFC [0001](rfc/0001-auto-vote-after-n-rounds.md)** — auto-vote after N rounds of no
-  convergence (manual + marker-triggered voting already ship).
+  convergence. Manual `Call Vote` and marker-triggered `[REQUEST_VOTE:]` voting ship today
+  ([TT-LAW-4](#TT-LAW-4)); vote types are consensus, free-form, and direction.
 - **Epics** (see [USER_STORIES.md](USER_STORIES.md)): A Roundtable · B Personalities · C Voting ·
   D Persistence · E Credentials · F Appearance. Backlog headline: graduate the Cypress e2e flows
   into verified ✅ and land auto-vote.

@@ -77,28 +77,25 @@ function Invoke-Digest {
   $s9 = Get-Section $text 9
 
   # status index from USER_STORIES.md
-  $done = 0; $partial = 0; $planned = 0; $cut = 0
+  $done = 0; $partial = 0; $planned = 0
   if (Test-Path $Stories) {
     $st = Read-Text $Stories
     # astral-plane emoji are surrogate pairs; build them via code point, not [char]
     $emCheck   = [char]::ConvertFromUtf32(0x2705)    # check mark (BMP)
     $emPartial = [char]::ConvertFromUtf32(0x1F7E1)   # yellow circle
     $emPlanned = [char]::ConvertFromUtf32(0x2B1C)    # white square (BMP)
-    $emCut     = [char]::ConvertFromUtf32(0x1F5D1)   # wastebasket
     # only count actual story lines (those bearing a TT-US- id), not the legend/blockquote
     $storyText = (([regex]::Split($st, "\r?\n")) | Where-Object { $_ -match 'TT-US-' }) -join "`n"
     $done    = ([regex]::Matches($storyText, [regex]::Escape($emCheck))).Count
     $partial = ([regex]::Matches($storyText, [regex]::Escape($emPartial))).Count
     $planned = ([regex]::Matches($storyText, [regex]::Escape($emPlanned))).Count
-    $cut     = ([regex]::Matches($storyText, [regex]::Escape($emCut))).Count
   }
 
-  # latest amendment head
-  $amendHead = ''
+  # pending decisions (AMENDMENTS.md entries not yet folded into the bible; normally none)
+  $pending = @()
   if (Test-Path $Amend) {
     $am = Read-Text $Amend
-    $matches = [regex]::Matches($am, '(?m)^##\s+(TT-A\d+.*)$')
-    if ($matches.Count -gt 0) { $amendHead = $matches[$matches.Count - 1].Groups[1].Value.Trim() }
+    $pending = @([regex]::Matches($am, '(?m)^##\s+(TT-A\d+.*)$') | ForEach-Object { $_.Groups[1].Value.Trim() })
   }
 
   $sb = New-Object System.Text.StringBuilder
@@ -113,12 +110,16 @@ function Invoke-Digest {
   [void]$sb.AppendLine($s5); [void]$sb.AppendLine("")
   [void]$sb.AppendLine($s9); [void]$sb.AppendLine("")
   [void]$sb.AppendLine("## Status index")
-  [void]$sb.AppendLine("- done: $done  |  partial: $partial  |  planned: $planned  |  cut: $cut")
-  [void]$sb.AppendLine("- latest amendment: $amendHead")
+  [void]$sb.AppendLine("- done: $done  |  partial: $partial  |  planned: $planned")
   [void]$sb.AppendLine("")
+  if ($pending.Count -gt 0) {
+    [void]$sb.AppendLine("## Pending decisions (docs/AMENDMENTS.md, not yet folded into the bible)")
+    foreach ($p in $pending) { [void]$sb.AppendLine("- $p") }
+    [void]$sb.AppendLine("")
+  }
 
   [IO.File]::WriteAllText($Digest, $sb.ToString(), (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host "digest -> docs/BIBLE.digest.md (done=$done partial=$partial planned=$planned cut=$cut)"
+  Write-Host "digest -> docs/BIBLE.digest.md (done=$done partial=$partial planned=$planned pending=$($pending.Count))"
 }
 
 # ---------- DOCTOR ----------

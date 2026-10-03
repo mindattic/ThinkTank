@@ -19,7 +19,7 @@ $preamble = @"
 The following is the AUTHORITATIVE Codex digest for the Think Tank (TT) project, generated from
 docs/BIBLE.md. Treat it as the source of truth for what the project IS, is NOT, and its Laws.
 Reference bible sections by their stable {#TT-...} anchors, never by line number. Full detail and
-the user stories live in docs/BIBLE.md, docs/USER_STORIES.md, and docs/AMENDMENTS.md.
+the user stories live in docs/BIBLE.md and docs/USER_STORIES.md.
 
 "@
 

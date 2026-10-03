@@ -139,7 +139,7 @@ public class VotingServiceTests
     }
 
     // ── ChatParticipant → VoterProfile mapping ──────────────────────────
-    // Mirrors the spec table in CLAUDE.md ("Participant → VoterProfile Mapping").
+    // VotingService.MapToVoterProfiles (docs/BIBLE.md §4.3, TT-LAW-4).
     // The ApiKeyOverride / ModelOverride fields are nullable because Legion falls
     // back to its global VotingConfiguration when null — so a participant without
     // an AuthOverrideJson must produce null overrides, not empty strings.
