@@ -172,8 +172,8 @@ item 3 in [USER_STORIES.md](USER_STORIES.md).)*
 
 ## 6. Verified state {#TT-§6}
 **Build:** `dotnet build` / `dotnet test` on .NET 10 SDK `10.0.300` — clean.
-**Tests (verified 2026-06-07):** `dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj` →
-**Passed: 293, Failed: 0, Skipped: 0** (duration ~2 s). This is the evidence behind every ✅ in
+**Tests (verified 2026-10-03):** `dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj` →
+**Passed: 294, Failed: 0, Skipped: 0** (duration ~1 s). This is the evidence behind every ✅ in
 [USER_STORIES.md](USER_STORIES.md).
 
 Proven working (test-backed): multi-provider dispatch routing through Legion; provider-prefix

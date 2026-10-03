@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Think Tank — User Stories
 > ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test.
-> Status evidence: `dotnet test ThinkTank.UnitTests` → 293 passed / 0 failed (2026-06-07).
+> Status evidence: `dotnet test ThinkTank.UnitTests` → 294 passed / 0 failed (2026-10-03).
 
 ## Epic A — Roundtable orchestration
 - **TT-US-A1 ✅** As a user, I can dispatch every participant's turn through one provider-agnostic

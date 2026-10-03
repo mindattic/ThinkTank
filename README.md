@@ -2,7 +2,7 @@
 
 Blazor Server web app that seats Claude, ChatGPT, Gemini and DeepSeek at one table to debate your topic, with personas, parallel debates, mid-discussion interjections and LLM-driven votes.
 
-[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/) [![Blazor Server](https://img.shields.io/badge/Blazor-Server-5C2D91)](https://learn.microsoft.com/aspnet/core/blazor/) [![C#](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/) [![Tests](https://img.shields.io/badge/NUnit-293%20passing-2E7D32)](docs/BIBLE.md) [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/) [![Blazor Server](https://img.shields.io/badge/Blazor-Server-5C2D91)](https://learn.microsoft.com/aspnet/core/blazor/) [![C#](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/) [![Tests](https://img.shields.io/badge/NUnit-294%20passing-2E7D32)](docs/BIBLE.md) [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
 
 ```text
                        you: "Should we rewrite the billing service in Rust?"
@@ -229,7 +229,7 @@ A legacy `chat.json` array file is migrated to `chat.jsonl` on first read or app
 dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj
 ```
 
-Last recorded run (docs/BIBLE.md, 2026-06-07): 293 passed, 0 failed, 0 skipped in about 2 seconds. The 21 test files:
+Last recorded run (docs/BIBLE.md, 2026-10-03): 294 passed, 0 failed, 0 skipped in about 1 second. The 21 test files:
 
 | Area | Files |
 | --- | --- |
