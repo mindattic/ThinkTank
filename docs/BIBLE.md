@@ -164,29 +164,29 @@ markdown. Loading degrades gracefully on missing files/fields. *(Guarded by the
 
 ### {#TT-LAW-6} TT-LAW-6 — Diagnostics and committed files are secret-free
 API responses surfaced in the Diagnostics panel are redacted, and no real-looking provider key is
-ever committed to the repo. *(Enforced by policy, not a running test: provider auth lives in
-`Settings.json` under `%LOCALAPPDATA%` (outside the repo), `.gitignore`, and code review. The guard
-test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
-`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` is commented out; re-enabling it is backlog
-item 3 in [USER_STORIES.md](USER_STORIES.md).)*
+ever committed to the repo. Provider auth lives in `Settings.json` under `%LOCALAPPDATA%` (outside
+the repo). *(Enforced by `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
+`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs`, which scans every git-tracked file for
+full-shape Anthropic, OpenAI, Google, GitHub, AWS and Slack keys and private-key blocks;
+`KeyPatterns_DetectRealShapes_AndIgnoreOrdinaryText` proves the patterns fire.)*
 
 ## 6. Verified state {#TT-§6}
 **Build:** `dotnet build` / `dotnet test` on .NET 10 SDK `10.0.300` — clean.
 **Tests (verified 2026-10-03):** `dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj` →
-**Passed: 294, Failed: 0, Skipped: 0** (duration ~1 s). This is the evidence behind every ✅ in
+**Passed: 296, Failed: 0, Skipped: 0** (duration ~1 s). This is the evidence behind every ✅ in
 [USER_STORIES.md](USER_STORIES.md).
 
 Proven working (test-backed): multi-provider dispatch routing through Legion; provider-prefix
 sanitization; history trimming; the Vault credential overlay + precedence; `ChatParticipant`→
 `VoterProfile` mapping; `[REQUEST_VOTE:]` marker parsing/stripping; conversation persistence +
 turn replay; the 18-theme appearance service with clamping; psychometric profile rendering;
-Razor component rendering (Home, NavMenu, NotFound, ConfirmationDialog, SettingsAppearance).
+Razor component rendering (Home, NavMenu, NotFound, ConfirmationDialog, SettingsAppearance); no
+real-looking credential in any tracked file.
 
 Not yet test-proven (UI-only / e2e): the live round loop, user chat injection, title generation,
 and provider connectivity polling are exercised by Cypress specs (`navigation`, `settings`,
 `chat`, `vote-dialog`) which require a running dev server and are not part of the unit run — see
-[USER_STORIES.md](USER_STORIES.md) priority backlog. The no-secrets guard test is commented out, so
-TT-US-E3 is 🟡 ([TT-LAW-6](#TT-LAW-6)).
+[USER_STORIES.md](USER_STORIES.md) priority backlog.
 
 ## 7. Active frontier {#TT-§7}
 - **RFC [0001](rfc/0001-auto-vote-after-n-rounds.md)** — auto-vote after N rounds of no

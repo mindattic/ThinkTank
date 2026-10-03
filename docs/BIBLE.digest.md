@@ -60,11 +60,11 @@ markdown. Loading degrades gracefully on missing files/fields. *(Guarded by the
 
 ### {#TT-LAW-6} TT-LAW-6 — Diagnostics and committed files are secret-free
 API responses surfaced in the Diagnostics panel are redacted, and no real-looking provider key is
-ever committed to the repo. *(Enforced by policy, not a running test: provider auth lives in
-`Settings.json` under `%LOCALAPPDATA%` (outside the repo), `.gitignore`, and code review. The guard
-test `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
-`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` is commented out; re-enabling it is backlog
-item 3 in [USER_STORIES.md](USER_STORIES.md).)*
+ever committed to the repo. Provider auth lives in `Settings.json` under `%LOCALAPPDATA%` (outside
+the repo). *(Enforced by `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
+`ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs`, which scans every git-tracked file for
+full-shape Anthropic, OpenAI, Google, GitHub, AWS and Slack keys and private-key blocks;
+`KeyPatterns_DetectRealShapes_AndIgnoreOrdinaryText` proves the patterns fire.)*
 
 ## 9. Glossary {#TT-§9}
 - **Participant** — one AI seat at the roundtable (`ChatParticipant`), instantiated from a
@@ -83,5 +83,5 @@ item 3 in [USER_STORIES.md](USER_STORIES.md).)*
 - **Vault overlay** — the runtime-only credential side map; never persisted ([TT-LAW-2](#TT-LAW-2)).
 
 ## Status index
-- done: 22  |  partial: 6  |  planned: 0
+- done: 22  |  partial: 4  |  planned: 0
 

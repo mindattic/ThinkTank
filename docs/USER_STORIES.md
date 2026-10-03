@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Think Tank — User Stories
 > ✅ done (shipped & tested) · 🟡 partial · ⬜ planned. Every ✅ cites the test.
-> Status evidence: `dotnet test ThinkTank.UnitTests` → 294 passed / 0 failed (2026-10-03).
+> Status evidence: `dotnet test ThinkTank.UnitTests` → 296 passed / 0 failed (2026-10-03).
 
 ## Epic A — Roundtable orchestration
 - **TT-US-A1 ✅** As a user, I can dispatch every participant's turn through one provider-agnostic
@@ -79,10 +79,9 @@ updated: 2026-10-03
 - **TT-US-E2 ✅** As an operator, credential precedence is deterministic (override > disk > vault).
   *(verified by `GetKeyForProvider_ExplicitOverride_WinsOverEverything`,
   `GetKeyForProvider_IgnoresDiskKey_UsesRuntime`, `GetKeyForProvider_EmptyDiskKey_FallsBackToRuntime`.)*
-- **TT-US-E3 🟡** As a developer, no real-looking key is ever committed to the repo. *(guard test
-  `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` exists but is commented out in
-  `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` — law is enforced by policy, not a
-  running assertion; see [TT-LAW-6](BIBLE.md#TT-LAW-6).)*
+- **TT-US-E3 ✅** As a developer, no real-looking key is ever committed to the repo; see
+  [TT-LAW-6](BIBLE.md#TT-LAW-6). *(verified by `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles`,
+  `KeyPatterns_DetectRealShapes_AndIgnoreOrdinaryText`.)*
 
 ## Epic F — Appearance
 - **TT-US-F1 ✅** As a user, I can pick any of 18 themes and it persists, falling back to dark on an
@@ -96,10 +95,7 @@ updated: 2026-10-03
 1. **🟡→✅ Graduate the round loop** (TT-US-A5): wire a bUnit/integration assertion or stabilize
    `chat.cy.js` so the start→round→stop flow is verified, not just UI-tested.
 2. **🟡→✅ Graduate the vote dialog** (TT-US-C4): assert injection of the synthetic vote turn.
-3. **🟡→✅ Re-enable the no-secrets guard** (TT-US-E3): uncomment and fix
-   `ProviderAuthConfigs_ShouldNotContainRealLookingKeys_InRepoFiles` in
-   `ThinkTank.UnitTests/Security/NoSecretsCommittedTests.cs` to restore ✅.
-4. **⬜ Auto-vote after N rounds** — see RFC [0001](rfc/0001-auto-vote-after-n-rounds.md); graduates
+3. **⬜ Auto-vote after N rounds** — see RFC [0001](rfc/0001-auto-vote-after-n-rounds.md); graduates
    into [TT-§7](BIBLE.md#TT-§7) and a new Epic C story.
-5. **⬜ Title generation** verification (currently background UI logic, untested in the unit run).
-6. **⬜ Provider connectivity polling** assertion.
+4. **⬜ Title generation** verification (currently background UI logic, untested in the unit run).
+5. **⬜ Provider connectivity polling** assertion.

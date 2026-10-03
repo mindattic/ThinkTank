@@ -2,7 +2,7 @@
 
 Blazor Server web app that seats Claude, ChatGPT, Gemini and DeepSeek at one table to debate your topic, with personas, parallel debates, mid-discussion interjections and LLM-driven votes.
 
-[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/) [![Blazor Server](https://img.shields.io/badge/Blazor-Server-5C2D91)](https://learn.microsoft.com/aspnet/core/blazor/) [![C#](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/) [![Tests](https://img.shields.io/badge/NUnit-294%20passing-2E7D32)](docs/BIBLE.md) [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/) [![Blazor Server](https://img.shields.io/badge/Blazor-Server-5C2D91)](https://learn.microsoft.com/aspnet/core/blazor/) [![C#](https://img.shields.io/badge/language-C%23-239120)](https://learn.microsoft.com/dotnet/csharp/) [![Tests](https://img.shields.io/badge/NUnit-296%20passing-2E7D32)](docs/BIBLE.md) [![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](#license)
 
 ```text
                        you: "Should we rewrite the billing service in Rust?"
@@ -223,13 +223,13 @@ A legacy `chat.json` array file is migrated to `chat.jsonl` on first read or app
 
 ## Testing
 
-`ThinkTank.UnitTests` uses NUnit 4.4.0 and bUnit 1.31.3 on net10.0, with `Microsoft.Extensions.Caching.Memory` pinned to 10.0.5 to override a vulnerable preview dependency (NU1903, GHSA-qj66-m88j-hmgj).
+`ThinkTank.UnitTests` uses NUnit 4.4.0 and bUnit 1.31.3 on net10.0, with `Microsoft.Extensions.Caching.Memory` pinned to 10.0.5 to override a vulnerable preview dependency (NU1903, GHSA-qj66-m88j-hmgj), and `AngleSharp` pinned to 1.8.3 to override bUnit's vulnerable 1.1.2 (GHSA-pgww-w46g-26qg).
 
 ```powershell
 dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj
 ```
 
-Last recorded run (docs/BIBLE.md, 2026-10-03): 294 passed, 0 failed, 0 skipped in about 1 second. The 21 test files:
+Last recorded run (docs/BIBLE.md, 2026-10-03): 296 passed, 0 failed, 0 skipped in about 1 second. The 21 test files:
 
 | Area | Files |
 | --- | --- |
@@ -238,7 +238,7 @@ Last recorded run (docs/BIBLE.md, 2026-10-03): 294 passed, 0 failed, 0 skipped i
 | Persistence | `ChatStorageTests` |
 | Psychometrics | `PsychometricsTests` |
 | bUnit components | `ConfirmationDialogComponentTests`, `HomePageComponentTests`, `NavMenuComponentTests`, `NotFoundPageComponentTests`, `SettingsAppearanceComponentTests` |
-| Security | `Security/NoSecretsCommittedTests` (guard currently commented out, see `TT-LAW-6`) |
+| Security | `Security/NoSecretsCommittedTests`: scans every git-tracked file for real-looking provider keys (`TT-LAW-6`) |
 | Setup | `TestAssemblySetup` |
 
 ### End-to-end tests
@@ -274,8 +274,7 @@ ThinkTank/
   cypress/e2e/              Cypress specs
   cypress.config.js
   docs/                     Codex canon: BIBLE, USER_STORIES, pending decisions, digest, rfc
-  index.htm                 Stale static landing page (not deployed, not current)
-  package.json              Cypress scripts (plus stale landing-page build and deploy scripts)
+  package.json              Cypress scripts
   tools/codex.ps1           Docs digest and doctor
   tools/build-readme.ps1    Renders README.md to README.htm with the shared codex-standard engine
 ```
@@ -285,8 +284,6 @@ ThinkTank/
 - Only the four default Legion providers (Claude, ChatGPT, Gemini, DeepSeek) are exposed as seats. Legion's catalog knows more, but ThinkTank does not surface them.
 - Single host, no accounts: every connected browser shares one state.
 - Automatic voting after N stalled rounds is design-only (RFC 0001).
-- The no-secrets-committed guard test is present but commented out; story TT-US-E3 is partial (`TT-LAW-6`).
-- `index.htm` is a stale static page that is not deployed and is inaccurate (it says MAUI and 11 providers). The `build` and `deploy` npm scripts point at `scripts/cli/`, which holds no scripts.
 
 ## Documentation
 

@@ -50,8 +50,7 @@ cypress/screenshots/
 cypress/videos/
 cypress/downloads/
 
-# Landing-page renderer (README -> index.htm) -- credentials and Node deps
-scripts/cli/deploy.settings.json
+# Node deps
 node_modules/
 package-lock.json
 .claude/quicksave.md
