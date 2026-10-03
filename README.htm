@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Think Tank</title>
-<meta name="description" content="Stop arguing with one AI. Convene a roundtable.">
+<title>ThinkTank</title>
+<meta name="description" content="Blazor Server web app that seats Claude, ChatGPT, Gemini and DeepSeek at one table to debate your topic, with personas, parallel debates, mid-discussion interjections and LLM-driven votes.">
 <meta name="generator" content="MindAttic Codex build-readme.ps1">
-<meta name="generated" content="2026-08-14">
+<meta name="generated" content="2026-10-03">
 <style>:root{
   --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;
   --border:#30363d;
@@ -110,95 +110,75 @@ pre:hover .cpbtn{opacity:1}
     <div id="toc-inner"></div>
   </nav>
   <main id="content">
-<h1 id="think-tank">Think Tank</h1>
-<p><strong>Stop arguing with one AI. Convene a roundtable.</strong></p>
-<p>Think Tank turns frontier LLMs into a panel of advisors that debate, refine, and decide together. Pick participants from <strong>11 providers</strong> (OpenAI, Anthropic, Google, DeepSeek, Mistral, xAI, Groq, Together AI, OpenRouter, Fireworks, Cohere), assign each a personality, drop a topic into the room, and watch them think out loud. Inject your own messages mid-discussion. Call a vote when they go in circles. Run multiple debates in parallel tabs — all in a plain browser tab, no install.</p>
-<p>This document is the practical "how do I build/run/test it" tour. For the canonical architecture record (what the system IS / is NOT, the Laws, verified test state), see <strong><a href="docs/BIBLE.md">docs/BIBLE.md</a></strong> — this README does not duplicate that; it links to it.</p>
-<hr>
-<h2 id="table-of-contents">Table of contents</h2>
+<h1 id="thinktank">ThinkTank</h1>
+<p>Blazor Server web app that seats Claude, ChatGPT, Gemini and DeepSeek at one table to debate your topic, with personas, parallel debates, mid-discussion interjections and LLM-driven votes.</p>
+<p><a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10"></a> <a href="https://learn.microsoft.com/aspnet/core/blazor/"><img src="https://img.shields.io/badge/Blazor-Server-5C2D91" alt="Blazor Server"></a> <a href="https://learn.microsoft.com/dotnet/csharp/"><img src="https://img.shields.io/badge/language-C%23-239120" alt="C#"></a> <a href="docs/BIBLE.md"><img src="https://img.shields.io/badge/NUnit-293%20passing-2E7D32" alt="Tests"></a> <a href="#license"><img src="https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey" alt="License"></a></p>
+<pre><code class="language-text">                       you: "Should we rewrite the billing service in Rust?"
+                                          |
+          +---------------+---------------+---------------+---------------+
+          |               |               |               |               |
+     [Claude]        [ChatGPT]        [Gemini]       [DeepSeek]      [you, any time]
+     persona A       persona B        persona C       persona D       pause + interject
+          |               |               |               |               |
+          +---------------+-------+-------+---------------+---------------+
+                                  |
+                 round 1 .. round N   (shared history, one reply per seat per round)
+                                  |
+                 "Call Vote"  or  a seat emits [REQUEST_VOTE: question]
+                                  |
+             [VOTE] Question: ...  Decision: ... (80% agreement)  Summary: ...</code></pre>
+<p>ThinkTank runs locally with <code>dotnet run</code>; there is no hosted demo.</p>
+<h2 id="why">Why</h2>
 <ul>
-<li><a href="#what-it-is">What it is</a></li>
-<li><a href="#documentation-canon-codex">Documentation canon (Codex)</a></li>
-<li><a href="#solution--project-layout">Solution &amp; project layout</a></li>
-<li><a href="#architecture">Architecture</a></li>
-<li><a href="#thinktankblazor--the-host">ThinkTank.Blazor — the host</a></li>
-<li><a href="#thinktankcore--services--models">ThinkTank.Core — services &amp; models</a></li>
-<li><a href="#thinktankshared--pages--components">ThinkTank.Shared — pages &amp; components</a></li>
-<li><a href="#feature-tour">Feature tour</a></li>
-<li><a href="#configuration">Configuration</a></li>
-<li><a href="#voting">Voting</a></li>
-<li><a href="#data-persistence">Data persistence</a></li>
-<li><a href="#getting-started">Getting started</a></li>
-<li><a href="#testing">Testing</a></li>
-<li><a href="#cypress-e2e-coverage">Cypress e2e coverage</a></li>
-<li><a href="#supported-providers">Supported providers</a></li>
-<li><a href="#other-files-at-the-repo-root">Other files at the repo root</a></li>
-<li><a href="#known-gaps--stale-notes">Known gaps / stale notes</a></li>
+<li>Stop arguing with one AI. Put four frontier models in the same room and watch where they agree and where they split.</li>
+<li>Give each seat a point of view: a markdown personality, or a Legion persona with a full psychometric profile.</li>
+<li>Break a stalemate on demand: call a vote and get a decision, an agreement percentage and a summary injected back into the debate.</li>
+<li>Steer without starting over: pause, type your own message into the room, and the round loop picks up again.</li>
+<li>Run several debates side by side in tabs, and come back to every one of them after a restart.</li>
+<li>Keys stay yours: bring your own key per provider, or reuse the shared MindAttic Vault keys, and nothing cloud-resolved is ever written to disk.</li>
 </ul>
-<hr>
-<h2 id="what-it-is">What it is</h2>
-<p>Think Tank is an <strong>ASP.NET Core Blazor Server</strong> web app (.NET 10, SignalR transport, no WASM, no native shell). It is <strong>not</strong> a single-model chat client — the unit of work is a <em>panel</em>, not a 1:1 conversation. It is <strong>not</strong> a provider SDK — every model call is routed through <a href="../MindAttic.Legion/">MindAttic.Legion</a>, which owns the provider catalog, HTTP transport, retries, and voting logic; Think Tank only assembles prompts, history, and personas. It is <strong>not</strong> a credential store — cloud-resolved API keys live in a runtime-only side map via <a href="../MindAttic.Vault/">MindAttic.Vault</a> and are never written to disk. It is <strong>not</strong> multi-user — state is shared globally on a single host with no accounts.</p>
-<p>It used to be a .NET MAUI desktop app; the MAUI shell was fully retired in favor of Blazor Server (see <code>AMENDMENTS.md#TT-A1</code>). It was also originally called <code>LLMThinkTank</code>/"Arena" before being renamed (<code>AMENDMENTS.md#TT-A2</code>).</p>
-<h2 id="documentation-canon-codex">Documentation canon (Codex)</h2>
-<p>This repo has adopted the MindAttic <strong>Codex</strong> documentation standard: each fact lives in exactly one layer, linked by stable ID rather than line number.</p>
-<table><thead><tr>
-<th>Layer</th>
-<th>File</th>
-<th>Purpose</th>
-</tr></thead><tbody>
-<tr>
-<td>L0</td>
-<td><a href="docs/BIBLE.md">docs/BIBLE.md</a></td>
-<td>What the system IS / is NOT, architecture, the Laws (<code>TT-LAW-n</code>), verified test state, glossary. Anchors <code>{#TT-§N}</code> / <code>{#TT-LAW-n}</code>.</td>
-</tr>
-<tr>
-<td>L1</td>
-<td><a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a></td>
-<td>Append-only change log (<code>TT-A&lt;n&gt;</code>). An amendment <em>wins</em> over the Bible; entries are never rewritten, only superseded.</td>
-</tr>
-<tr>
-<td>L2</td>
-<td><a href="docs/USER<em>STORIES.md">docs/USER</em>STORIES.md</a></td>
-<td>Stories <code>TT-US-&lt;Epic&gt;&lt;n&gt;</code>; every ✅ cites the NUnit test that proves it.</td>
-</tr>
-<tr>
-<td>rfc</td>
-<td><a href="docs/rfc/">docs/rfc/</a></td>
-<td>Design notes for work not yet graduated into L0/L2. Currently: <a href="docs/rfc/0001-auto-vote-after-n-rounds.md"><code>0001-auto-vote-after-n-rounds.md</code></a>.</td>
-</tr>
-<tr>
-<td>generated</td>
-<td><a href="docs/BIBLE.digest.md">docs/BIBLE.digest.md</a></td>
-<td>Produced by <code>tools/codex.ps1 digest</code>. Never hand-edit.</td>
-</tr>
-</tbody></table>
-<p>Status legend used across the canon: <code>✅ done</code> (test/build-verified) · <code>🟡 partial</code> · <code>⬜ planned</code> · <code>🗑️ cut</code> · <code>living</code>.</p>
-<p>Regenerate/validate the canon with:</p>
-<pre><code class="language-powershell">powershell -File tools/codex.ps1 digest    # regenerate docs/BIBLE.digest.md
-powershell -File tools/codex.ps1 doctor    # validate IDs, links, cited tests/paths, digest freshness</code></pre>
-<h2 id="solution-project-layout">Solution &amp; project layout</h2>
-<p><code>ThinkTank.slnx</code> (the newer XML <code>.slnx</code> solution format) lists exactly four projects, in this order:</p>
-<pre><code>ThinkTank/
-├── ThinkTank.slnx
-├── ThinkTank.Core/            Services + models class library (no UI)
-│   ├── Models/                 ParticipantTemplate, ChatParticipant, ChatConversation, SharedTurn, ...
-│   └── Services/                ThinkTankService, VotingService, SettingsService, AppearanceService, ...
-├── ThinkTank.Shared/           Razor class library — every page and component + wwwroot assets
-│   ├── Components/Layout/       MainLayout, NavMenu
-│   ├── Components/Pages/        Home, Chat, Settings, SettingsAppearance, NotFound
-│   ├── Components/Shared/       ConfirmationDialog
-│   └── wwwroot/                 app.css, theme.js, vendored Bootstrap CSS
-├── ThinkTank.Blazor/           ASP.NET Core host — Program.cs is the single DI composition root
-├── ThinkTank.UnitTests/        NUnit 4 + bUnit — 21 test files
-├── cypress/e2e/                Cypress specs: navigation, settings, chat, vote-dialog
-├── cypress.config.js
-├── docs/                       Codex canon (BIBLE.md, AMENDMENTS.md, USER_STORIES.md, digest, rfc/)
-├── index.htm                   Static MindAttic.com landing/marketing page (see below — currently stale)
-├── package.json                Cypress + landing-page build/deploy scripts
-├── scripts/cli/                Landing-page build/deploy tooling (partially untracked, see note below)
-└── tools/codex.ps1             Codex digest/doctor tooling</code></pre>
-<h2 id="architecture">Architecture</h2>
-<pre><code>                          Browser
+<h2 id="features">Features</h2>
+<h3 id="roundtable-debates">Roundtable debates</h3>
+<ul>
+<li>Four seats out of the box, one per default provider in MindAttic.Legion's catalog: Claude (Anthropic), ChatGPT (OpenAI), Gemini (Google) and DeepSeek. Every call routes through <code>MindAttic.Legion</code>; ThinkTank never talks to a provider directly (<code>TT-LAW-1</code>).</li>
+<li>Setup panel with a topic box, a "Random topic" button that asks a model of your choice for a topic, a participant pill grid, and a Start button that needs at least two seats.</li>
+<li>Live round loop: each round calls every participant once with its personality, the shared history, the topic and the response-length preset, up to Max Rounds. An interrupted conversation resumes from its last incomplete round.</li>
+<li>User injection: pause, type in the bottom chat bar, and the loop resumes with your message in the shared history.</li>
+<li>Chat title generation: after round 1 every participant suggests a title in the background and one participant picks the best.</li>
+</ul>
+<h3 id="personas-and-personalities">Personas and personalities</h3>
+<ul>
+<li>Each seat is a markdown personality template, editable on Settings, Personas, with an AI "Generate" button for custom seats.</li>
+<li>"Add persona from Legion library" dialog, searchable by name and personality text. A Legion persona's OCEAN, HEXACO, MBTI, Enneagram and DISC profile is rendered into a behavioural brief appended to the system prompt.</li>
+<li>Self-reference prefixes such as a leading <code>[Claude]:</code> are stripped from replies.</li>
+</ul>
+<h3 id="voting">Voting</h3>
+<ul>
+<li>A Call Vote dialog with three vote types: Consensus (yes or no), Free-form conclusion, and Direction (your own comma-separated options).</li>
+<li>Any participant can trigger a vote itself by emitting <code>[REQUEST_VOTE: question]</code>; the marker is detected and removed from the visible reply.</li>
+<li>The aggregated result is injected into the shared history as a synthetic <code>[VOTE]</code> turn, so later rounds argue from the decision (<code>TT-LAW-4</code>).</li>
+</ul>
+<h3 id="workspace">Workspace</h3>
+<ul>
+<li>Conversation tabs with a right-click menu to rename or close; tabs persist across restarts.</li>
+<li>Member sidebar with animated typing indicators, per-conversation Max Tokens, Max Rounds and Response Length overrides, a Claude-only fallback toggle, Pause and Resume, and Export transcript to Markdown.</li>
+<li>Collapsible status log with Perspective, Context and Diagnostics tabs. Per-participant perspective files are kept per conversation; background faults (title generation, auto-vote) land in Diagnostics instead of vanishing.</li>
+<li>18 themes: dark, light, spring, summer, autumn, winter, matrix, ice, sunset, neon, dracula, solarized, midnight, aurora, ember, ocean, forest and mono, plus control height (28-60 px), gutter (0-30 px) and border radius (0-24 px) sliders.</li>
+</ul>
+<h2 id="quick-start">Quick start</h2>
+<p>Prerequisites: the .NET 10 SDK and at least one API key for Claude, OpenAI, Gemini or DeepSeek.</p>
+<pre><code class="language-powershell">git clone https://github.com/mindattic/ThinkTank.git
+cd ThinkTank
+dotnet restore
+dotnet run --project ThinkTank.Blazor</code></pre>
+<p>The app listens on <code>https://localhost:7100</code> and <code>http://localhost:5100</code> (from <code>ThinkTank.Blazor/Properties/launchSettings.json</code>).</p>
+<ol>
+<li>Open Settings, Defaults, and paste a key for each provider you want under API keys, or leave them blank to use keys already in the shared MindAttic Vault file.</li>
+<li>Open Think Tank (<code>/thinktank</code>), enter a topic, pick at least two participants and click Start.</li>
+<li>Interject, call a vote, or open a new tab for a second debate.</li>
+</ol>
+<h2 id="how-it-works">How it works</h2>
+<pre><code class="language-text">                          Browser
      Blazor Server components (Home / Chat / Settings / ...)
                              |  SignalR (interactive server)
                              v
@@ -215,25 +195,25 @@ powershell -File tools/codex.ps1 doctor    # validate IDs, links, cited tests/pa
               LegionClient + LLMVotingService +
               LlmProviderCatalog + PersonaStore
                               |
-        +--------------------+--------------------+
-        v                    v                     v
-     OpenAI              Anthropic            ... 9 more
-    (ChatGPT)              (Claude)              providers</code></pre>
-<p>All services are registered as <strong>singletons</strong> in <code>ThinkTank.Blazor/Program.cs</code> — one shared engine and DI graph across every Blazor circuit (per the org-wide <code>HOUSE-LAW-6</code>). Full architecture narrative, the domain model ("nouns"), the service list ("verbs"), and the five project Laws (<code>TT-LAW-1</code>..<code>TT-LAW-6</code>) live in <a href="docs/BIBLE.md#TT-§4">docs/BIBLE.md §4</a> and <a href="docs/BIBLE.md#TT-§5">§5</a> — summarized in the table below.</p>
+        +-------------+-------+-------+-------------+
+        v             v               v             v
+     Claude        ChatGPT         Gemini       DeepSeek</code></pre>
+<p>ThinkTank is an ASP.NET Core Blazor Server web app (.NET 10, SignalR, no WebAssembly, no native shell). The unit of work is a panel, not a one-to-one chat. Legion owns the provider catalog, HTTP transport, retries and voting; ThinkTank assembles prompts, history and personas. It is single-host and has no accounts: state is shared by every browser connected to the same server.</p>
+<p>All services are registered as singletons in <code>ThinkTank.Blazor/Program.cs</code>, one DI graph across every Blazor circuit (<code>HOUSE-LAW-6</code>). ThinkTank started as a .NET MAUI desktop app and was called "Arena" (also <code>LLMThinkTank</code>); the MAUI shell was retired in favour of Blazor Server (<code>docs/AMENDMENTS.md</code>, TT-A1 and TT-A2).</p>
 <table><thead><tr>
 <th>Project</th>
-<th>SDK / target</th>
+<th>SDK and target</th>
 <th>Role</th>
 </tr></thead><tbody>
 <tr>
 <td><code>ThinkTank.Core</code></td>
 <td>classlib, net10.0</td>
-<td>Services + models; references <code>MindAttic.Legion</code> (22.0.0) + <code>MindAttic.Vault</code> (1.0.0). No UI.</td>
+<td>Services and models. References <code>MindAttic.Legion</code> 25.0.0 and <code>MindAttic.Vault</code> 4.0.0 from NuGet. No UI.</td>
 </tr>
 <tr>
 <td><code>ThinkTank.Shared</code></td>
 <td>Razor SDK, net10.0</td>
-<td>Razor component library + <code>wwwroot</code> (CSS, 18 themes, <code>theme.js</code>, vendored Bootstrap).</td>
+<td>Razor component library plus <code>wwwroot</code> (CSS, 18 themes, <code>theme.js</code>, vendored Bootstrap CSS).</td>
 </tr>
 <tr>
 <td><code>ThinkTank.Blazor</code></td>
@@ -242,32 +222,30 @@ powershell -File tools/codex.ps1 doctor    # validate IDs, links, cited tests/pa
 </tr>
 <tr>
 <td><code>ThinkTank.UnitTests</code></td>
-<td>NUnit 4 + bUnit, net10.0</td>
-<td>Service, model, component, security, and psychometric tests.</td>
+<td>NUnit 4 and bUnit, net10.0</td>
+<td>Service, model, component, security and psychometric tests.</td>
 </tr>
 </tbody></table>
-<p>None of the four <code>.csproj</code> files carries a <code>&lt;Version&gt;</code> tag — Think Tank is run via <code>dotnet run</code>, not packaged/published as a versioned artifact (unlike the NuGet-consumed <code>MindAttic.Legion</code> 22.0.0 / <code>MindAttic.Vault</code> 1.0.0 it depends on).</p>
-<h2 id="thinktankblazor-the-host">ThinkTank.Blazor — the host</h2>
-<p><code>ThinkTank.Blazor.csproj</code> targets <code>Microsoft.NET.Sdk.Web</code> / net10.0 and references <code>ThinkTank.Core</code> + <code>ThinkTank.Shared</code>. Its only files are <code>Program.cs</code>, <code>Components/App.razor</code>, <code>Components/Routes.razor</code>, <code>Components/_Imports.razor</code>, and <code>Properties/launchSettings.json</code>.</p>
-<p><code>Program.cs</code> is the entire composition root:</p>
+<p>None of the four <code>.csproj</code> files carries a <code>&lt;Version&gt;</code>: ThinkTank is run with <code>dotnet run</code>, not packaged.</p>
+<h3 id="the-host">The host</h3>
+<p><code>ThinkTank.Blazor</code> holds only <code>Program.cs</code>, <code>Components/App.razor</code>, <code>Components/Routes.razor</code>, <code>Components/_Imports.razor</code> and <code>Properties/launchSettings.json</code>. <code>Program.cs</code>:</p>
 <ol>
-<li><code>builder.Configuration.AddMindAtticVaultFiles()</code> — layers config <code>appsettings.json</code> → Vault files (<code>%APPDATA%\MindAttic\LLM\providers.json</code>) → environment variables (Azure App    Service / Key Vault in production).</li>
-<li><code>AddRazorComponents().AddInteractiveServerComponents()</code> — confirms Blazor <strong>Server</strong> render mode (not WebAssembly, not Hybrid).</li>
-<li><code>builder.Services.AddLegionClient()</code> — registers <code>MindAttic.Legion</code>; Legion owns its own <code>IHttpClientFactory</code> internally.</li>
-<li>A singleton factory builds <code>SettingsService</code>, seeds <code>ProviderDefaults</code> from configuration (mapping e.g. <code>claude</code>→<code>"anthropic"</code>, <code>gemini</code>→<code>"google"</code>, else <code>"bearer"</code>), then layers the    Vault overlay via <code>settings.OverlayFromConfiguration(config)</code>.</li>
-<li>Registers <code>ThinkTankSettingsService</code>, <code>ChatLogService</code>, <code>AppearanceService</code>, <code>ChatConversationsService</code>, <code>HumanNameService</code>, <code>NameGeneratorService</code>,    <code>PsychometricProfileService</code>, <code>ThinkTankService</code>, <code>AddLLMVoting(...)</code> (with    <code>VotingConfiguration { AllowedProviderIds = LlmProviderCatalog.DefaultIds }</code>), <code>VotingService</code>    — <strong>all as singletons</strong>.</li>
-<li>Pipeline: exception handler / HSTS / HTTPS redirect only outside Development, <code>UseStaticFiles</code>, <code>UseAntiforgery</code>, <code>MapRazorComponents&lt;App&gt;().AddInteractiveServerRenderMode()    .AddAdditionalAssemblies(typeof(ThinkTank.Shared.Components.Pages.Home).Assembly)</code>.</li>
+<li><code>AddMindAtticVaultFiles()</code> layers configuration: <code>appsettings.json</code>, then the Vault file <code>%APPDATA%\MindAttic\LLM\providers.json</code>, then environment variables (Azure App Service or Key Vault in production).</li>
+<li><code>AddRazorComponents().AddInteractiveServerComponents()</code> selects Blazor Server render mode.</li>
+<li><code>AddLegionClient()</code> registers MindAttic.Legion, which owns its own <code>IHttpClientFactory</code>.</li>
+<li>A singleton factory builds <code>SettingsService</code>, seeds <code>ProviderDefaults</code> from configuration (<code>claude</code> maps to auth type <code>anthropic</code>, <code>gemini</code> to <code>google</code>, anything else to <code>bearer</code>), then applies the Vault overlay with <code>OverlayFromConfiguration</code>.</li>
+<li>Registers <code>ThinkTankSettingsService</code>, <code>ChatLogService</code>, <code>AppearanceService</code>, <code>ChatConversationsService</code>, <code>HumanNameService</code>, <code>NameGeneratorService</code>, <code>PsychometricProfileService</code>, <code>ThinkTankService</code>, <code>AddLLMVoting</code> (allowed providers: <code>LlmProviderCatalog.DefaultIds</code>) and <code>VotingService</code>, all as singletons.</li>
+<li>Pipeline: exception handler, HSTS and HTTPS redirect outside Development, then <code>UseStaticFiles</code>, <code>UseAntiforgery</code>, and <code>MapRazorComponents&lt;App&gt;()</code> with interactive server render mode and the <code>ThinkTank.Shared</code> assembly added.</li>
 </ol>
-<h2 id="thinktankcore-services-models">ThinkTank.Core — services &amp; models</h2>
-<p>Class library, no UI. Two folders:</p>
-<p><strong><code>Models/</code></strong></p>
+<h3 id="services-and-models">Services and models</h3>
+<p><code>ThinkTank.Core/Models</code>:</p>
 <table><thead><tr>
 <th>File</th>
 <th>Types</th>
 </tr></thead><tbody>
 <tr>
 <td><code>ChatModels.cs</code></td>
-<td><code>ParticipantTemplate</code> (seat definition: <code>ProviderId</code>, <code>DisplayName</code>, <code>PersonalityMarkdown</code>, optional <code>AuthOverrideJson</code>, <code>IsDefault</code>, optional <code>PersonaId</code>), <code>ChatParticipant</code> (an instantiated seat with <code>EffectivePersonaId</code>), <code>ChatConversation</code> (one tab: <code>ChatId</code>, <code>Title</code>, <code>Participants</code>, <code>Topic</code>, per-tab <code>MaxTokens</code>/<code>MaxRounds</code>/<code>ResponseLength</code>, <code>Messages</code>, <code>StatusEvents</code>, <code>Diagnostics</code>)</td>
+<td><code>ParticipantTemplate</code> (seat definition: provider, display name, personality markdown, optional auth override, default flag, optional persona id), <code>ChatParticipant</code> (an instantiated seat), <code>ChatConversation</code> (one tab: id, title, participants, topic, per-tab max tokens, max rounds and response length, messages, status events, diagnostics)</td>
 </tr>
 <tr>
 <td><code>LlmModels.cs</code></td>
@@ -283,153 +261,136 @@ powershell -File tools/codex.ps1 doctor    # validate IDs, links, cited tests/pa
 </tr>
 <tr>
 <td><code>ChatLogModels.cs</code>, <code>AppearanceMode.cs</code>, <code>ResponseLengthPreset.cs</code></td>
-<td>Log entries, theme mode, response-length presets</td>
+<td>Log entries, the 18 theme modes, response-length presets</td>
 </tr>
 </tbody></table>
-<p><strong><code>Services/</code></strong></p>
+<p><code>ThinkTank.Core/Services</code>:</p>
 <table><thead><tr>
 <th>Service</th>
 <th>Responsibility</th>
 </tr></thead><tbody>
 <tr>
 <td><code>ThinkTankService</code></td>
-<td>Orchestration engine — builds per-participant history, applies personality markdown as system prompt, trims to <code>MaxContextTurns</code>, sanitizes self-reference prefixes (e.g. strips leading <code>[Claude]:</code>), emits redacted <code>Diagnostics</code> events. Every model call goes through <code>LegionClient</code>.</td>
+<td>Orchestration: builds per-participant history, applies the personality as system prompt, trims to <code>MaxContextTurns</code>, strips self-reference prefixes, emits redacted diagnostics. Every call goes through <code>LegionClient</code>.</td>
 </tr>
 <tr>
 <td><code>VotingService</code></td>
-<td>Maps <code>ChatParticipant[]</code> → Legion <code>VoterProfile[]</code> (<code>MapToVoterProfiles</code>), delegates to <code>LlmVotingService.VoteWithProfilesAsync</code>.</td>
+<td>Maps participants to Legion <code>VoterProfile</code>s and delegates to <code>LlmVotingService.VoteWithProfilesAsync</code>.</td>
 </tr>
 <tr>
-<td><code>SettingsService</code> + <code>SettingsServiceVaultOverlay</code></td>
-<td>Persists to <code>%LOCALAPPDATA%\MindAttic\ThinkTank\Settings.json</code>; <code>GetKeyForProvider</code> implements the fixed credential precedence; <code>BuildAuthJson</code>.</td>
+<td><code>SettingsService</code> and <code>SettingsServiceVaultOverlay</code></td>
+<td>Persist <code>Settings.json</code>; <code>GetKeyForProvider</code> applies the fixed key precedence; <code>BuildAuthJson</code>; per-app BYOK keys through Vault's <code>AppScopedCredentialStore</code>.</td>
 </tr>
 <tr>
-<td><code>PsychometricProfileService</code> + <code>PsychometricNarrator</code></td>
-<td>Resolve a participant's Legion persona and render OCEAN/HEXACO/MBTI/Enneagram/DISC as a behavioral brief appended to the system prompt.</td>
+<td><code>PsychometricProfileService</code> and <code>PsychometricNarrator</code></td>
+<td>Resolve a seat's Legion persona and render its psychometric profile as a behavioural brief.</td>
 </tr>
 <tr>
 <td><code>AppearanceService</code></td>
-<td>18-theme + control-height/gutter/border-radius state, applied via JS interop, persisted through <code>SettingsService</code>.</td>
+<td>Theme, control height, gutter and border radius, clamped, applied through JS interop and persisted.</td>
 </tr>
 <tr>
 <td><code>ChatConversationsService</code></td>
-<td>Tab lifecycle over <code>ObservableCollection&lt;ChatConversation&gt;</code> — <code>NewId()</code>, <code>CreateConversation</code>, <code>SetActive</code>, <code>CloseConversation</code>.</td>
+<td>Tab lifecycle: <code>NewId</code>, <code>CreateConversation</code>, <code>SetActive</code>, <code>CloseConversation</code>.</td>
 </tr>
 <tr>
 <td><code>ChatLogService</code></td>
-<td>In-memory event log with a <code>Changed</code> event.</td>
+<td>Event log with a <code>Changed</code> event and per-conversation storage.</td>
 </tr>
 <tr>
-<td><code>HumanNameService</code> / <code>NameGeneratorService</code></td>
-<td>Random and AI-generated participant names (<code>GenerateFirstName</code>, falls back to <code>"Alex"</code> on empty/garbage output).</td>
+<td><code>HumanNameService</code> and <code>NameGeneratorService</code></td>
+<td>Random and AI-generated participant names (falls back to "Alex" on empty output).</td>
 </tr>
 </tbody></table>
-<h2 id="thinktankshared-pages-components">ThinkTank.Shared — pages &amp; components</h2>
-<p>Razor class library (<code>Microsoft.NET.Sdk.Razor</code>, <code>EnableDefaultCssItems=false</code>), references <code>ThinkTank.Core</code>, pulls in <code>Microsoft.AspNetCore.Components.Web</code>. Styling is hand-rolled <code>wwwroot/app.css</code> plus vendored Bootstrap CSS (no component library like MudBlazor/Radzen); <code>wwwroot/theme.js</code> applies the 18-theme CSS variables via JS interop.</p>
+<h3 id="pages-and-components">Pages and components</h3>
+<p><code>ThinkTank.Shared</code> is a Razor class library with hand-rolled <code>wwwroot/app.css</code> and vendored Bootstrap CSS; there is no component library.</p>
 <table><thead><tr>
-<th>Page/component</th>
+<th>Page or component</th>
 <th>Route</th>
 <th>What it does</th>
 </tr></thead><tbody>
 <tr>
 <td><code>Home.razor</code></td>
 <td><code>/</code></td>
-<td>Trivial landing page — links to "Open Think Tank" (<code>/thinktank</code>) and "Settings" (<code>/settings</code>).</td>
+<td>Landing page with links to Think Tank and Settings.</td>
 </tr>
 <tr>
 <td><code>Chat.razor</code></td>
 <td><code>/thinktank</code></td>
-<td>The centerpiece (~1,800 lines). See feature tour below.</td>
+<td>The debate workspace (about 1,800 lines): setup panel, tabs, round loop, voting, status log.</td>
 </tr>
 <tr>
 <td><code>Settings.razor</code></td>
 <td><code>/settings</code></td>
-<td>Three tabs: <strong>Personas</strong> (edit <code>ParticipantTemplate</code>s — name, provider, model override, custom auth JSON), <strong>Defaults</strong> (global max tokens/rounds/response-length, Claude-fallback toggle, a notice that keys are managed entirely via MindAttic Vault — no in-app key entry), <strong>Appearance</strong> (delegates to <code>SettingsAppearance</code>).</td>
+<td>Three tabs: Personas (edit templates: name, provider, model override, custom auth JSON), Defaults (global max tokens, max rounds, response length, Claude fallback, per-provider API keys), Appearance.</td>
 </tr>
 <tr>
 <td><code>SettingsAppearance.razor</code></td>
-<td>(embedded)</td>
-<td>18 themes + control-height/gutter/border-radius sliders.</td>
+<td>embedded</td>
+<td>Theme picker and sizing sliders.</td>
 </tr>
 <tr>
 <td><code>NotFound.razor</code></td>
-<td>(fallback)</td>
+<td>fallback</td>
 <td>404 page.</td>
 </tr>
 <tr>
 <td><code>Shared/ConfirmationDialog.razor</code></td>
-<td>(embedded)</td>
-<td>Reusable confirm/cancel dialog.</td>
+<td>embedded</td>
+<td>Reusable confirm and cancel dialog.</td>
 </tr>
 <tr>
 <td><code>Layout/MainLayout.razor</code>, <code>Layout/NavMenu.razor</code></td>
-<td>(layout)</td>
-<td>App shell + nav.</td>
+<td>layout</td>
+<td>App shell and navigation.</td>
 </tr>
 </tbody></table>
-<h2 id="feature-tour">Feature tour</h2>
-<p>Everything below is implemented in <code>Chat.razor</code>'s markup + <code>@code</code> block:</p>
-<ul>
-<li><strong>11 providers</strong>, routed exclusively through <code>MindAttic.Legion</code> — Think Tank never calls a provider directly (<code>TT-LAW-1</code>).</li>
-<li><strong>Conversation tabs</strong> — a tab strip supports multiple independent debates in parallel, with a right-click context menu for rename/close; tabs persist across restarts.</li>
-<li><strong>Personality system</strong> — each seat is a markdown personality template; personas can instead be picked from the Legion persona library ("Add persona from Legion library" dialog, searchable by   name/personality text) with a psychometric profile rendered into the system prompt.</li>
-<li><strong>Setup panel</strong> — topic textarea, a "Random topic" button (calls an LLM to generate one), participant pill grid for template selection, Start button (requires ≥2 participants).</li>
-<li><strong>Live round loop</strong> — <code>StartActive()</code> builds shared history from persisted messages, supports mid-session resume (detects an incomplete last round), loops up to <code>MaxRounds</code>, calling   <code>ThinkTankService.CallProvider(...)</code> once per participant per round with the personality markdown   + vote-request instruction, auth override, topic, shared history, response length, and persona id.</li>
-<li><strong>User injection</strong> — pause the conversation, type a message in the bottom chat bar; the round loop resumes automatically afterward.</li>
-<li><strong>Vote-driven decisions</strong> — a <strong>Call Vote</strong> button opens a dialog with three vote types (Consensus Yes/No, Free-form, Direction with comma-separated custom options); participants can   also self-trigger a vote by emitting <code>[REQUEST_VOTE: question]</code>, detected and stripped from their   visible response.</li>
-<li><strong>Live status UI</strong> — member sidebar shows who's "speaking" with animated typing dots, per-conversation Max Tokens/Max Rounds/Response Length overrides, a "Claude only" fallback   toggle, Export transcript, Pause/Resume, and a collapsible Status Log with three tabs   (Perspective / Context / Diagnostics).</li>
-<li><strong>Chat title generation</strong> — after round 1, each participant is asked for a title suggestion in the background, and one participant picks the best.</li>
-<li><strong>18 themes</strong> — dark, light, spring, summer, autumn, winter, matrix, ice, sunset, neon, dracula, solarized, midnight, aurora, ember, ocean, forest, mono.</li>
-<li><strong>Perspective tracking</strong> — per-participant markdown per conversation, visible in the status panel.</li>
-<li><strong>Fault surfacing</strong> — <code>ObserveFault</code> wires fire-and-forget background tasks (title generation, auto-vote) so errors land in the Diagnostics panel instead of vanishing silently.</li>
-</ul>
 <h2 id="configuration">Configuration</h2>
 <h3 id="provider-auth">Provider auth</h3>
+<p>Each provider's auth is a JSON blob:</p>
 <pre><code class="language-json">{ "type": "bearer", "apiKey": "sk-...", "model": "gpt-4o", "maxTokens": 2048 }</code></pre>
-<p><code>type</code> values: <code>"bearer"</code> (OpenAI-compatible), <code>"anthropic"</code>, <code>"google"</code>.</p>
-<h3 id="cloud-credentials">Cloud credentials</h3>
-<p>Keys resolve from <code>%APPDATA%\MindAttic\LLM\providers.json</code> (via <code>AddMindAtticVaultFiles</code>) or <code>MindAttic:Vault:LLM:&lt;providerId&gt;:apiKey</code> in the environment / Azure App Service Application Settings. Cloud-resolved keys are held in a runtime-only side map and are <strong>never</strong> written back to <code>Settings.json</code> (<code>TT-LAW-2</code>). Resolution precedence (<code>TT-LAW-3</code>): explicit per-call override → on-disk <code>apiKey</code> in <code>Settings.json</code> → Vault/cloud runtime override.</p>
+<p><code>type</code> is <code>bearer</code> (OpenAI-compatible), <code>anthropic</code> or <code>google</code>.</p>
+<h3 id="keys-and-precedence">Keys and precedence</h3>
+<ul>
+<li>Settings, Defaults, API keys stores a key used by ThinkTank only; it never changes what another MindAttic app resolves. Leave a field blank to fall back to the shared default.</li>
+<li>The shared default comes from <code>%APPDATA%\MindAttic\LLM\providers.json</code> (through <code>AddMindAtticVaultFiles</code>) or from <code>MindAttic:Vault:LLM:&lt;providerId&gt;:apiKey</code> in environment variables or Azure App Service settings.</li>
+<li>Cloud-resolved keys live in a runtime-only side map and are never written back to <code>Settings.json</code> (<code>TT-LAW-2</code>).</li>
+<li><code>GetKeyForProvider</code> resolves in a fixed order (<code>TT-LAW-3</code>): explicit per-call override, then the on-disk key in <code>Settings.json</code>, then the Vault or cloud runtime override.</li>
+</ul>
+<h3 id="claude-fallback">Claude fallback</h3>
+<p>Settings, Defaults, Claude fallback mode routes every participant through the Anthropic API when other providers are rate-limited or down. Each seat keeps its own personality prompt; only the Claude key is used.</p>
 <h3 id="appearance">Appearance</h3>
-<p>Settings → Appearance: theme (18 options), control height (28–60px), gutter (0–30px), border radius (0–24px). All values are clamped.</p>
+<p>Settings, Appearance: theme (18 options), control height (28-60 px), gutter (0-30 px), border radius (0-24 px). Values are clamped in <code>AppearanceService</code>.</p>
 <h2 id="voting">Voting</h2>
-<p>The <strong>Call Vote</strong> button polls every participant and injects the aggregated result into shared history as a synthetic turn (<code>TT-LAW-4</code>):</p>
-<pre><code>[VOTE] Question: &lt;question&gt;
+<p>Call Vote polls every participant through Legion's <code>LLMVotingService</code> and injects the result into shared history as a synthetic turn:</p>
+<pre><code class="language-text">[VOTE] Question: &lt;question&gt;
 Decision: &lt;consensus&gt; (&lt;percentage&gt; agreement)
 Summary: &lt;narrativeSummary&gt;</code></pre>
-<p>Vote types: <strong>Consensus</strong> (Yes/No), <strong>Free-form</strong> (open-ended), <strong>Direction</strong> (custom options). Implemented in <code>VotingService</code> via <code>MindAttic.Legion.LLMVotingService</code>.</p>
-<p><strong>Auto-vote:</strong> every participant's system prompt ends with an instruction permitting them to emit <code>[REQUEST_VOTE: question]</code> to trigger an immediate vote; the marker is stripped from the visible response. See <code>Chat.razor</code> → <code>VoteRequestInstruction</code>. Auto-vote <em>after N rounds of no convergence</em> (as opposed to a self-triggered marker) is not yet implemented — see <a href="docs/rfc/0001-auto-vote-after-n-rounds.md">docs/rfc/0001-auto-vote-after-n-rounds.md</a>.</p>
+<p>Vote types are Consensus (yes or no), Free-form, and Direction (custom options). Every participant's system prompt ends with an instruction (<code>VoteRequestInstruction</code> in <code>Chat.razor</code>) allowing it to emit <code>[REQUEST_VOTE: question]</code> to trigger a vote immediately. Automatic voting after N rounds without convergence is designed but not built: see <a href="docs/rfc/0001-auto-vote-after-n-rounds.md">docs/rfc/0001-auto-vote-after-n-rounds.md</a>.</p>
 <h2 id="data-persistence">Data persistence</h2>
-<p>Persistence must fully reconstruct a conversation after restart (<code>TT-LAW-5</code>):</p>
-<pre><code>%LOCALAPPDATA%\MindAttic\ThinkTank\
-├── Settings.json          All app settings (provider auth, templates, conversations, appearance)
-├── Personalities/
-│   └── {templateId}.md
-└── Conversations/
-    └── {chatId}/
-        ├── chat.json       Append-only event log (chat-start, turn, user)
-        └── {participantId}.md</code></pre>
-<h2 id="getting-started">Getting started</h2>
-<pre><code class="language-powershell">dotnet restore
-dotnet run --project ThinkTank.Blazor
-# -&gt; https://localhost:5001
-
-# First launch: Settings &gt; Providers -&gt; enter API key(s), select models
-# Then: Conversations -&gt; enter topic, select participants, click Start</code></pre>
+<p>Persistence must fully rebuild a conversation after a restart (<code>TT-LAW-5</code>):</p>
+<pre><code class="language-text">%LOCALAPPDATA%\MindAttic\ThinkTank\
+  Settings.json            All app settings (templates, conversations, appearance, defaults)
+  Personalities\           Personality markdown (seeded: ChatGPT.md, Claude.md, Gemini.md, DeepSeek.md)
+  Conversations\
+    {chatId}\
+      chat.jsonl           Append-only event log, one JSON entry per line
+      {modelId}.md         Per-participant perspective file</code></pre>
+<p>A legacy <code>chat.json</code> array file is migrated to <code>chat.jsonl</code> on first read or append.</p>
 <h2 id="testing">Testing</h2>
-<p><code>ThinkTank.UnitTests</code> uses <strong>NUnit 4.4.0</strong> + <strong>bUnit 1.31.3</strong> (component testing) on net10.0, with <code>Microsoft.Extensions.Caching.Memory</code> pinned to 10.0.5 to override a vulnerable preview transitive dependency (NU1903 / GHSA-qj66-m88j-hmgj).</p>
+<p><code>ThinkTank.UnitTests</code> uses NUnit 4.4.0 and bUnit 1.31.3 on net10.0, with <code>Microsoft.Extensions.Caching.Memory</code> pinned to 10.0.5 to override a vulnerable preview dependency (NU1903, GHSA-qj66-m88j-hmgj).</p>
 <pre><code class="language-powershell">dotnet test ThinkTank.UnitTests/ThinkTank.UnitTests.csproj</code></pre>
-<p>As of the last BIBLE sync (2026-06-07): <strong>293 passed, 0 failed, 0 skipped</strong> (~2s). See <a href="docs/BIBLE.md#TT-§6">docs/BIBLE.md §6</a> for exactly what is and isn't test-proven.</p>
-<p>21 test files, roughly grouped:</p>
+<p>Last recorded run (docs/BIBLE.md, 2026-06-07): 293 passed, 0 failed, 0 skipped in about 2 seconds. The 21 test files:</p>
 <table><thead><tr>
 <th>Area</th>
 <th>Files</th>
 </tr></thead><tbody>
 <tr>
 <td>Services</td>
-<td><code>AppearanceServiceTests</code>, <code>ChatConversationsServiceTests</code>, <code>ChatLogServiceTests</code>, <code>HumanNameServiceTests</code>, <code>NameGeneratorServiceTests</code>, <code>SettingsServiceTests</code> (largest, 40 <code>[Test]</code>s), <code>SettingsServiceVaultOverlayTests</code>, <code>ThinkTankServiceTests</code>, <code>VotingServiceTests</code></td>
+<td><code>AppearanceServiceTests</code>, <code>ChatConversationsServiceTests</code>, <code>ChatLogServiceTests</code>, <code>HumanNameServiceTests</code>, <code>NameGeneratorServiceTests</code>, <code>SettingsServiceTests</code>, <code>SettingsServiceVaultOverlayTests</code>, <code>ThinkTankServiceTests</code>, <code>VotingServiceTests</code></td>
 </tr>
 <tr>
-<td>Models / parsing</td>
+<td>Models and parsing</td>
 <td><code>ModelTests</code>, <code>ProviderAuthConfigParsingTests</code>, <code>VoteMarkerTests</code></td>
 </tr>
 <tr>
@@ -446,113 +407,83 @@ dotnet run --project ThinkTank.Blazor
 </tr>
 <tr>
 <td>Security</td>
-<td><code>Security/NoSecretsCommittedTests</code> (guard test currently <strong>disabled</strong> — see <code>AMENDMENTS.md#TT-A4</code>)</td>
+<td><code>Security/NoSecretsCommittedTests</code> (guard currently disabled, see TT-A4)</td>
 </tr>
 <tr>
 <td>Setup</td>
 <td><code>TestAssemblySetup</code></td>
 </tr>
 </tbody></table>
-<h2 id="cypress-e2e-coverage">Cypress e2e coverage</h2>
-<pre><code class="language-powershell"># Blazor app must be running on http://localhost:5100
-dotnet run --project ThinkTank.Blazor --urls http://localhost:5100
-
+<h3 id="end-to-end-tests">End-to-end tests</h3>
+<p>Cypress specs live in <code>cypress/e2e/</code> and need the app running on port 5100:</p>
+<pre><code class="language-powershell">dotnet run --project ThinkTank.Blazor --urls http://localhost:5100
 npm install
-npx cypress run    # headless
-npx cypress open   # interactive</code></pre>
-<p><code>cypress.config.js</code>: <code>baseUrl http://localhost:5100</code> (override with <code>CYPRESS_BASE_URL</code>), <code>specPattern cypress/e2e/**/*.cy.js</code>, no support file, screenshots on failure, videos off, 15s command timeout, 60s page-load/response timeout, 1600×900 viewport, <code>chromeWebSecurity: false</code>.</p>
-<p>Four specs in <code>cypress/e2e/</code>:</p>
+npx cypress run</code></pre>
+<p>Use <code>npx cypress open</code> for the interactive runner, or <code>npm run e2e:nav</code> for navigation only. <code>cypress.config.js</code> sets <code>baseUrl</code> to <code>http://localhost:5100</code> (override with <code>CYPRESS_BASE_URL</code>), a 1600x900 viewport, a 15 s command timeout, 60 s page-load and response timeouts, screenshots on failure, no video, and <code>chromeWebSecurity: false</code>.</p>
 <table><thead><tr>
 <th>Spec</th>
 <th>Coverage</th>
 </tr></thead><tbody>
 <tr>
 <td><code>navigation.cy.js</code></td>
-<td>Basic routing between pages.</td>
+<td>Routing between pages.</td>
 </tr>
 <tr>
 <td><code>settings.cy.js</code></td>
-<td>Settings page tabs/behavior.</td>
+<td>Settings tabs and behaviour.</td>
 </tr>
 <tr>
 <td><code>chat.cy.js</code></td>
-<td>Tab-strip rendering, "+ New" tab creation, right-click rename/close context menu. Deliberately does not intercept live LLM dispatch (that happens server-side via Legion) — left to the C# unit suite.</td>
+<td>Tab strip, new-tab creation, right-click rename and close. Does not trigger live LLM calls.</td>
 </tr>
 <tr>
 <td><code>vote-dialog.cy.js</code></td>
-<td>Setup-panel participant pills + Start button, pill <code>aria-pressed</code> toggling, opening the Call Vote dialog (asserts all 3 vote-type radios present, default text matches Consensus), switching to Direction reveals the custom-options input, Cancel closes the dialog. Deliberately does not submit an actual vote (would trigger real LLM calls).</td>
+<td>Participant pills and Start button, pill toggling, opening Call Vote, the three vote types, the Direction options field, Cancel. Does not submit a vote.</td>
 </tr>
 </tbody></table>
-<p>Both <code>chat.cy.js</code> and <code>vote-dialog.cy.js</code> use a <code>blazorClick</code> helper that dispatches a raw <code>MouseEvent</code> at the document level to bypass Cypress actionability checks against Blazor Server's <code>@onclick</code>-bound elements, and wait ~2500ms after <code>cy.visit</code> for the SignalR circuit to hydrate.</p>
-<p>These flows are UI-only — not yet proven by the unit suite (see <a href="docs/USER<em>STORIES.md">docs/USER</em>STORIES.md</a> priority backlog: graduating the round loop and vote dialog from Cypress-only to unit-proven is an open item).</p>
-<h2 id="supported-providers">Supported providers</h2>
-<p>All calls route through <code>MindAttic.Legion.LegionClient</code>. Default models:</p>
-<table><thead><tr>
-<th>Provider</th>
-<th>Default model</th>
-</tr></thead><tbody>
-<tr>
-<td>Claude (Anthropic)</td>
-<td><code>claude-sonnet-4-6</code></td>
-</tr>
-<tr>
-<td>ChatGPT (OpenAI)</td>
-<td><code>gpt-4.1-mini</code></td>
-</tr>
-<tr>
-<td>Gemini (Google)</td>
-<td><code>gemini-2.5-flash</code></td>
-</tr>
-<tr>
-<td>DeepSeek</td>
-<td><code>deepseek-chat</code></td>
-</tr>
-<tr>
-<td>Mistral</td>
-<td><code>mistral-large-latest</code></td>
-</tr>
-<tr>
-<td>Grok (xAI)</td>
-<td><code>grok-3-mini-fast</code></td>
-</tr>
-<tr>
-<td>Groq</td>
-<td><code>llama-3.3-70b-versatile</code></td>
-</tr>
-<tr>
-<td>Together AI</td>
-<td><code>meta-llama/Llama-3-70b-chat-hf</code></td>
-</tr>
-<tr>
-<td>OpenRouter</td>
-<td><code>meta-llama/llama-3.1-8b-instruct:free</code></td>
-</tr>
-<tr>
-<td>Fireworks</td>
-<td><code>accounts/fireworks/models/llama-v3p1-70b-instruct</code></td>
-</tr>
-<tr>
-<td>Cohere</td>
-<td><code>command-r-plus</code></td>
-</tr>
-</tbody></table>
-<h2 id="other-files-at-the-repo-root">Other files at the repo root</h2>
+<p><code>chat.cy.js</code> and <code>vote-dialog.cy.js</code> use a <code>blazorClick</code> helper that dispatches a raw <code>MouseEvent</code> to get past Cypress actionability checks on Blazor Server <code>@onclick</code> elements, and wait about 2.5 s after each visit for the SignalR circuit. These flows are UI-tested only; moving the round loop and vote dialog under unit tests is an open item in <a href="docs/USER%5FSTORIES.md">docs/USER%5FSTORIES.md</a>.</p>
+<h2 id="project-layout">Project layout</h2>
+<pre><code class="language-text">ThinkTank/
+  ThinkTank.slnx            Solution (XML .slnx format), four projects
+  ThinkTank.Core/           Services + models class library (no UI)
+  ThinkTank.Shared/         Razor class library: pages, components, wwwroot
+  ThinkTank.Blazor/         ASP.NET Core host, Program.cs composition root
+  ThinkTank.UnitTests/      NUnit 4 + bUnit, 21 test files
+  cypress/e2e/              Cypress specs
+  cypress.config.js
+  docs/                     Codex canon: BIBLE, AMENDMENTS, USER_STORIES, digest, rfc
+  index.htm                 Old static landing page from the retired mindattic.com pipeline
+  package.json              Cypress scripts (plus stale landing-page build and deploy scripts)
+  tools/codex.ps1           Docs digest and doctor
+  tools/build-readme.ps1    Renders README.md to README.htm with the shared codex-standard engine</code></pre>
+<h2 id="limitations">Limitations</h2>
 <ul>
-<li><strong><code>index.htm</code></strong> — a static, self-contained MindAttic.com marketing/landing page (synced by <code>MindAttic.UiUx/sync/sync-landing-page.ps1</code> tooling — not hand-edited). Embeds a base64 "Outfit"   variable font. This file is out of scope for this README to modify; see the stale-content note   below.</li>
-<li><strong><code>package.json</code></strong> (<code>thinktank-e2e</code>) — Cypress scripts (<code>e2e</code>, <code>e2e:open</code>, <code>e2e:nav</code>) plus landing-page <code>build</code>/<code>deploy</code> scripts (<code>node scripts/cli/build-html.js</code>,   <code>powershell ... scripts/cli/deploy.ps1</code>). Dependencies <code>highlight.js</code>/<code>marked</code> support that   build/deploy tooling, not the app itself.</li>
-<li><strong><code>scripts/cli/</code></strong> — only <code>deploy.settings.json</code> is tracked in git; <code>build-html.js</code> and <code>deploy.ps1</code> referenced by <code>package.json</code> exist locally but are untracked/gitignored.</li>
-<li><strong><code>tools/codex.ps1</code></strong> — Codex <code>digest</code>/<code>doctor</code> tooling for <code>docs/</code>.</li>
-<li><strong><code>tools/build-readme.ps1</code></strong> — thin wrapper that regenerates <code>README.htm</code> from this file via the shared <code>codex-standard/build-readme.ps1</code> engine (same engine every MindAttic repo uses).</li>
+<li>Only the four default Legion providers (Claude, ChatGPT, Gemini, DeepSeek) are exposed as seats. Legion's catalog knows more, but ThinkTank does not surface them.</li>
+<li>Single host, no accounts: every connected browser shares one state.</li>
+<li>Automatic voting after N stalled rounds is design-only (RFC 0001).</li>
+<li>The no-secrets-committed guard test is present but commented out; story TT-US-E3 is partial (TT-A4).</li>
+<li><code>index.htm</code> is a stale snapshot from the retired landing-page pipeline (it still says MAUI and 11 providers). The <code>build</code> and <code>deploy</code> npm scripts point at <code>scripts/cli/</code>, which holds no scripts.</li>
+<li><code>CLAUDE.md</code> still has a "Planned Feature: LLMVoting Integration" section; voting has shipped (TT-A3), so treat it as historical design notes.</li>
 </ul>
-<h2 id="known-gaps-stale-notes">Known gaps / stale notes</h2>
+<h2 id="documentation">Documentation</h2>
+<p>ThinkTank follows the MindAttic Codex standard: each fact lives in one layer, linked by a stable ID.</p>
 <ul>
-<li><code>index.htm</code>'s meta description currently reads *".NET 10 MAUI + Blazor desktop app for multi-LLM conversations across 11 providers"* — the MAUI shell was retired   (<code>docs/AMENDMENTS.md#TT-A1</code>); the product is Blazor Server web-only. This is a landing-page sync   lag, not a fact about the current codebase.</li>
-<li><code>CLAUDE.md</code> still contains a large "Planned Feature: LLMVoting Integration" section describing the original design for voting. That feature has since <strong>shipped</strong> (Epic C —   <code>docs/AMENDMENTS.md#TT-A3</code>); treat that section as historical design notes, not current backlog.</li>
-<li>The no-secrets-committed guard test (<code>Security/NoSecretsCommittedTests.cs</code>) is present but commented out; <code>TT-US-E3</code> is downgraded to 🟡 (<code>docs/AMENDMENTS.md#TT-A4</code>).</li>
-<li>Auto-vote after N rounds of stalemate is design-only (RFC 0001), not implemented.</li>
+<li><a href="docs/BIBLE.md">docs/BIBLE.md</a> - what ThinkTank is and is not, architecture, the Laws (<code>TT-LAW-n</code>), verified test state, glossary.</li>
+<li><a href="docs/AMENDMENTS.md">docs/AMENDMENTS.md</a> - append-only change log (<code>TT-A&lt;n&gt;</code>); an amendment wins over the Bible.</li>
+<li><a href="docs/USER_STORIES.md">User stories</a> - stories <code>TT-US-&lt;Epic&gt;&lt;n&gt;</code>, each done story citing the test that proves it.</li>
+<li><a href="docs/rfc/">docs/rfc/</a> - design notes not yet in the canon.</li>
+<li><a href="docs/BIBLE.digest.md">docs/BIBLE.digest.md</a> - generated by <code>tools/codex.ps1 digest</code>; never hand-edit.</li>
+<li><a href="AGENTS.md">AGENTS.md</a> - instructions for coding agents working in this repo.</li>
 </ul>
+<pre><code class="language-powershell">powershell -File tools/codex.ps1 digest    # regenerate docs/BIBLE.digest.md
+powershell -File tools/codex.ps1 doctor    # validate IDs, links, cited tests and paths, digest freshness
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\build-readme.ps1    # README.md to README.htm</code></pre>
+<h2 id="license">License</h2>
+<p>This repository has no LICENSE file. All rights reserved.</p>
+<hr>
+<p>Part of <a href="https://mindattic.com">MindAttic</a> — see more projects at <a href="https://github.com/mindattic">github.com/mindattic</a>. Related: <a href="https://github.com/mindattic/MindAttic.Legion">MindAttic.Legion</a> (LLM dispatch, voting and personas), <a href="https://github.com/mindattic/MindAttic.Vault">MindAttic.Vault</a> (credentials).</p>
 
-    <p class="codex-footer">Generated 2026-08-14 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
+    <p class="codex-footer">Generated 2026-10-03 by the shared MindAttic Codex engine (<code>codex-standard/build-readme.ps1</code>) from <code>README.md</code>. Edit the Markdown source, not this file.</p>
   </main>
 </div>
 <script>(function(){
