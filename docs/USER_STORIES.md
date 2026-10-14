@@ -99,3 +99,13 @@ updated: 2026-10-03
    into [TT-§7](BIBLE.md#TT-§7) and a new Epic C story.
 4. **⬜ Title generation** verification (currently background UI logic, untested in the unit run).
 5. **⬜ Provider connectivity polling** assertion.
+
+## Tickets
+> Permanent log of every change and fix — this repo's ticket system. Rows are append-only: never
+> delete or reword one; only move its Status (open → closed / wont-do) and fill in Ref. Status is
+> a word, not a glyph, so tickets don't count toward the story index. Keep this section last.
+
+| ID | Date | Type | Status | Summary | Ref |
+|---|---|---|---|---|---|
+| TT-T1 | 2026-10-12 | docs | closed | Start the permanent ticket log in USER_STORIES.md | — |
+| TT-T2 | 2026-10-12 | chore | closed | /commit now logs every commit as a ticket in this table | `.claude/skills/commit/SKILL.md` |
