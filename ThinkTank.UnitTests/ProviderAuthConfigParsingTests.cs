@@ -1,4 +1,3 @@
-using MindAttic.Legion;
 using NUnit.Framework;
 using ThinkTank.Core.Models;
 using ThinkTank.Core.Services;
@@ -6,29 +5,14 @@ using ThinkTank.Core.Services;
 namespace ThinkTank.UnitTests;
 
 /// <summary>
-/// Covers credential resolution through SettingsService. API keys are no longer stored
-/// in-app — <see cref="ThinkTankSettingsService.GetKeyForProvider"/> resolves from an
-/// explicit override or the Vault-populated <see cref="ThinkTankSettingsService.RuntimeApiKeyOverrides"/>.
-/// <see cref="ThinkTankSettingsService.SetAuthJson"/> persists only non-secret config and
-/// strips any <c>apiKey</c>.
+/// Credential and provider-config resolution through SettingsService (LAMP, TT-T27). API keys are never
+/// stored in-app: <see cref="ThinkTankSettingsService.GetKeyForProvider"/> resolves an explicit persona
+/// override, else ThinkTank's active key from Vault's shared named lists. Provider config JSON
+/// (<c>type</c>, <c>model</c>, <c>maxTokens</c>) is built from ThinkTank's Vault settings and never carries a key.
 /// </summary>
 [TestFixture]
 public class ProviderAuthConfigParsingTests
 {
-    private SettingsService settings = null!;
-
-    [SetUp]
-    public void SetUp()
-    {
-        var sandbox = MindAtticCredentialStore.CredentialDirectory;
-        if (Directory.Exists(sandbox))
-        {
-            foreach (var f in Directory.EnumerateFiles(sandbox))
-                File.Delete(f);
-        }
-        settings = new SettingsService();
-    }
-
     [Test]
     public void ProviderAuthConfig_IsValueRecord()
     {
@@ -38,62 +22,58 @@ public class ProviderAuthConfigParsingTests
     }
 
     [Test]
-    public void GetKey_ReturnsVaultOverride_WhenSet()
+    public void GetKey_ReturnsTheVaultKey_WhenSet()
     {
-        settings.RuntimeApiKeyOverrides["openai"] = "sk-abc";
+        var settings = TestLamp.Service(keys: TestLamp.KeysWith(("openai", "sk-abc")));
         Assert.That(settings.GetKeyForProvider("openai", null), Is.EqualTo("sk-abc"));
     }
 
     [Test]
-    public void GetKey_ReturnsEmpty_WhenNoVaultOverride()
+    public void GetKey_ReturnsEmpty_WhenVaultHasNoKey()
     {
-        Assert.That(settings.GetKeyForProvider("openai", null), Is.Empty);
-    }
-
-    [Test]
-    public void GetKey_IgnoresApiKeyOnDisk()
-    {
-        // Even if a key somehow lands in the on-disk auth JSON, it must NOT be used —
-        // credentials come from Vault only.
-        settings.SetAuthJson("openai", "{\"type\":\"bearer\",\"apiKey\":\"sk-on-disk\"}");
-        Assert.That(settings.GetKeyForProvider("openai", null), Is.Empty);
+        Assert.That(TestLamp.Service().GetKeyForProvider("openai", null), Is.Empty);
     }
 
     [Test]
     public void GetKey_OverridePrecedesVault()
     {
-        settings.RuntimeApiKeyOverrides["openai"] = "vault-key";
+        var settings = TestLamp.Service(keys: TestLamp.KeysWith(("openai", "vault-key")));
         Assert.That(settings.GetKeyForProvider("openai", "override-key"), Is.EqualTo("override-key"));
     }
 
     [Test]
     public void GetKey_BlankOverrideFallsBackToVault()
     {
-        settings.RuntimeApiKeyOverrides["openai"] = "vault-key";
+        var settings = TestLamp.Service(keys: TestLamp.KeysWith(("openai", "vault-key")));
         Assert.That(settings.GetKeyForProvider("openai", "   "), Is.EqualTo("vault-key"));
     }
 
     [Test]
-    public void SetAuthJson_StripsApiKey_PreservesModelAndMaxTokens()
+    public void GetAuthJson_CarriesModelAndMaxTokens_AndNeverAKey()
     {
-        settings.SetAuthJson("openai", "{\"type\":\"bearer\",\"apiKey\":\"should-be-dropped\",\"model\":\"gpt-5\",\"maxTokens\":4096}");
+        var settings = TestLamp.Service(s => { s.Providers.OpenAI.Model = "gpt-5"; s.Providers.OpenAI.MaxTokens = 4096; },
+            TestLamp.KeysWith(("openai", "sk-secret")));
 
         using var doc = System.Text.Json.JsonDocument.Parse(settings.GetAuthJson("openai"));
-        Assert.That(doc.RootElement.TryGetProperty("apiKey", out _), Is.False, "apiKey must be stripped");
+        Assert.That(doc.RootElement.TryGetProperty("apiKey", out _), Is.False, "no key in provider config");
+        Assert.That(doc.RootElement.GetProperty("type").GetString(), Is.EqualTo("bearer"));
         Assert.That(doc.RootElement.GetProperty("model").GetString(), Is.EqualTo("gpt-5"));
         Assert.That(doc.RootElement.GetProperty("maxTokens").GetInt32(), Is.EqualTo(4096));
     }
 
-    [Test]
-    public void SetAuthJson_MalformedJson_YieldsEmptyObject()
+    [TestCase("claude", "anthropic")]
+    [TestCase("gemini", "google")]
+    [TestCase("deepseek", "bearer")]
+    [TestCase("kimi", "bearer")]
+    public void GetAuthJson_KeepsEachProvidersWireType(string provider, string type)
     {
-        settings.SetAuthJson("openai", "{not valid json");
-        Assert.That(settings.GetAuthJson("openai"), Is.EqualTo("{}"));
+        using var doc = System.Text.Json.JsonDocument.Parse(TestLamp.Service().GetAuthJson(provider));
+        Assert.That(doc.RootElement.GetProperty("type").GetString(), Is.EqualTo(type));
     }
 
     [Test]
     public void GetAuthJson_UnknownProvider_ReturnsEmptyObject()
     {
-        Assert.That(settings.GetAuthJson("nope"), Is.EqualTo("{}"));
+        Assert.That(TestLamp.Service().GetAuthJson("nope"), Is.EqualTo("{}"));
     }
 }

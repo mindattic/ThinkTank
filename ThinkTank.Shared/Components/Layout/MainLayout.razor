@@ -11,9 +11,7 @@
 </div>
 
 @code {
-    // Apply persisted appearance on first interactive render of any page. Previously the
-    // saved theme / control sizing only took effect after visiting the Appearance tab,
-    // so a reload landed users on the default look until they opened Settings.
+    // Apply the saved appearance (ThinkTank's Vault settings) on first interactive render of any page.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)

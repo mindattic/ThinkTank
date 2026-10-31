@@ -135,9 +135,12 @@ public class ThinkTankService
         if (providerInfo is null)
             throw new ArgumentException($"Unknown provider: {actualProviderId}");
 
-        var apiKey = GetApiKey(actualProviderId, actualAuthOverride);
+        // A persona's own auth override key is used as-is; otherwise ThinkTank's keys from Vault's shared
+        // named lists, failing over when one is refused (LAMP, TT-T27).
+        var overrideKey = GetOverrideApiKey(actualProviderId, actualAuthOverride);
+        var apiKey = overrideKey ?? settings.GetKeyForProvider(actualProviderId, null);
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException($"No API key configured for provider '{actualProviderId}'.");
+            throw new InvalidOperationException($"No API key configured for provider '{actualProviderId}'. Add one in MindAttic Vault.");
 
         var defaultModel = providerInfo.DefaultModel ?? "";
         var model        = GetModel(actualProviderId, actualAuthOverride, defaultModel);
@@ -160,15 +163,19 @@ public class ThinkTankService
 
         try
         {
-            var raw = await legion.CallChatAsync(
+            Task<string> Call(string key, CancellationToken ct) => legion.CallChatAsync(
                 providerId: actualProviderId,
-                apiKey: apiKey,
+                apiKey: key,
                 model: model,
                 messages: turns,
                 systemPrompt: systemPrompt,
                 maxTokens: maxTokens,
                 temperature: 0.7,
-                ct: default);
+                ct: ct);
+
+            var raw = overrideKey is not null
+                ? await Call(overrideKey, default)
+                : await settings.ExecuteWithKeyAsync(actualProviderId, Call);
 
             var clean = SanitizeModelOutput(providerId, raw);
             EmitDiagnostics(providerId, model, clean, isError: false);
@@ -205,7 +212,8 @@ public class ThinkTankService
 
     // ── Auth / model / token resolution ─────────────────────────────────────
 
-    private string GetApiKey(string providerId, string? authOverrideJson)
+    /// <summary>The <c>apiKey</c> a persona's auth override carries, or null when it carries none.</summary>
+    private string? GetOverrideApiKey(string providerId, string? authOverrideJson)
     {
         if (!string.IsNullOrWhiteSpace(authOverrideJson))
         {
@@ -222,7 +230,7 @@ public class ThinkTankService
                 EmitDiagnostics(providerId, model: "", text: $"malformed auth override (apiKey lookup): {ex.Message}", isError: true, errorMessage: ex.Message);
             }
         }
-        return settings.GetKeyForProvider(providerId, null);
+        return null;
     }
 
     private string GetModel(string providerId, string? authOverrideJson, string defaultModel)

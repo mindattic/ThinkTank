@@ -11,49 +11,25 @@ namespace ThinkTank.Core.Services;
 /// </summary>
 public class SettingsService : ThinkTankSettingsService
 {
+    /// <summary>ThinkTank's Vault settings for this user and the local key files.</summary>
+    public SettingsService() { }
+
+    /// <summary>Explicit settings source and key selector (the host's, or a test's temp ones).</summary>
+    public SettingsService(ThinkTankSettingsSource? settings, KeySelector? keys) : base(settings, keys) { }
 }
 
 /// <summary>
-/// Manages all persistent application state: provider authentication credentials, participant
-/// templates, conversation history, and appearance settings. Data is stored as a single
-/// <c>Settings.json</c> file in the user's <c>LocalApplicationData/MindAttic/ThinkTank</c> folder.
-/// <para>
-/// <b>Initialization:</b> On first launch, seeds default auth configs for all 11 providers and
-/// creates default personality templates. On subsequent launches, loads existing settings and
-/// backfills any new providers added since the last update.
-/// </para>
-/// <para>
-/// <b>Persistence:</b> Every mutation method (SetAuthJson, SetAppearanceTheme, SaveTemplates, etc.)
-/// immediately writes the full state to disk, ensuring crash-safe persistence.
-/// </para>
+/// ThinkTank's persistent state. App-level settings (appearance, conversation defaults, provider models)
+/// are <see cref="ThinkTankSettings"/>, edited only in MindAttic.Vault.Desktop and read here live through
+/// <see cref="ThinkTankSettingsSource"/> (LAMP, TT-T27). Content (participant templates and conversation
+/// snapshots) stays in <c>%LOCALAPPDATA%\MindAttic\ThinkTank\Settings.json</c>; the pre-LAMP setting fields
+/// in that file are carried through every save untouched, as the rollback. Keys come from Vault's shared
+/// named lists through <see cref="KeySelector"/>.
 /// </summary>
 public class ThinkTankSettingsService
 {
-    /// <summary>Per-provider authentication and model configuration, keyed by provider ID.</summary>
-    /// <remarks>Case-insensitive so a participant whose <c>ProviderId</c> carries non-canonical
-    /// casing (e.g. "OpenAI") resolves the same entry that key/config lookups and
-    /// <see cref="RuntimeApiKeyOverrides"/> (also case-insensitive) use — they must agree.</remarks>
-    public Dictionary<string, ProviderAuthConfig> ProviderAuth { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Default provider auth configs (keyed by provider ID) loaded from an external source
-    /// such as User Secrets. Used by <see cref="ResetProvidersToDefaults"/> to restore credentials.
-    /// </summary>
-    public Dictionary<string, ProviderAuthConfig> ProviderDefaults { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Runtime-only apiKey overrides resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>
-    /// (e.g. Azure Key Vault references via App Service Application Settings, or shared dev user-secrets).
-    /// Populated by <see cref="SettingsServiceVaultOverlay.OverlayFromConfiguration"/>.
-    /// <para>
-    /// Read-through only: <see cref="GetKeyForProvider"/> falls back to this map when the on-disk
-    /// auth JSON has no apiKey set. Never serialized, never written back to <see cref="ProviderAuth"/>,
-    /// so cloud-resolved secrets cannot leak into <c>Settings.json</c> or the shared
-    /// <c>%APPDATA%\MindAttic\LLM\providers.json</c> store via <see cref="Save"/>.
-    /// </para>
-    /// </summary>
-    public Dictionary<string, string> RuntimeApiKeyOverrides { get; } =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ThinkTankSettingsSource settings;
+    private readonly KeySelector keys;
 
     /// <summary>Reusable participant templates (both built-in defaults and user-created customs).</summary>
     public List<ParticipantTemplate> Templates { get; } = new();
@@ -61,77 +37,93 @@ public class ThinkTankSettingsService
     /// <summary>Persisted conversation snapshots restored on app launch.</summary>
     public List<PersistedConversation> Conversations { get; } = new();
 
+    /// <summary>Fields of Settings.json this service doesn't own (the pre-LAMP settings), written back as read.</summary>
+    private Dictionary<string, System.Text.Json.JsonElement>? legacyFields;
+
     private const string SettingsFileName = "Settings.json";
 
     /// <summary>
     /// Guards every <see cref="Save"/> invocation so concurrent mutations (Blazor circuits,
-    /// OAuth callbacks, chat persistence) can't interleave their writes and corrupt Settings.json.
+    /// chat persistence) can't interleave their writes and corrupt Settings.json.
     /// </summary>
     private readonly object _saveLock = new();
 
+    private ThinkTankSettings S => settings.Current;
+
+    /// <summary>The settings source in use.</summary>
+    public ThinkTankSettingsSource Source => settings;
+
     /// <summary>Current UI theme name (e.g., "dark", "neon", "dracula").</summary>
-    public string? AppearanceTheme { get; private set; } = "dark";
+    public string? AppearanceTheme => string.IsNullOrWhiteSpace(S.Theme) ? "dark" : S.Theme;
 
     /// <summary>Height in pixels for UI control elements (buttons, inputs). Range: 28-60.</summary>
-    public int? ControlHeight { get; private set; } = 40;
+    public int? ControlHeight => S.ControlHeight;
 
     /// <summary>Gutter spacing in pixels between UI elements. Range: 0-30.</summary>
-    public int? Gutter { get; private set; } = 10;
+    public int? Gutter => S.Gutter;
 
     /// <summary>Border radius in pixels for rounded UI elements. Range: 0-24.</summary>
-    public int? BorderRadius { get; private set; } = 10;
+    public int? BorderRadius => S.BorderRadius;
 
     /// <summary>Global default max tokens per response. Conversations inherit this unless overridden.</summary>
-    public int? GlobalMaxTokens { get; private set; } = 2048;
+    public int? GlobalMaxTokens => S.GlobalMaxTokens;
 
     /// <summary>Global default max rounds per conversation. Conversations inherit this unless overridden.</summary>
-    public int? GlobalMaxRounds { get; private set; } = 10;
+    public int? GlobalMaxRounds => S.GlobalMaxRounds;
 
     /// <summary>
-    /// Global limit on how many prior <see cref="MindAttic.Legion.SharedTurn"/> entries
-    /// are passed to each participant. Older turns are dropped from the prompt;
-    /// <see cref="ThinkTankService"/> emits a diagnostic when truncation kicks in so the
-    /// user knows context was clipped.
+    /// Global limit on how many prior <see cref="MindAttic.Legion.SharedTurn"/> entries are passed to
+    /// each participant (at least 2).
     /// </summary>
-    public int? GlobalMaxContextTurns { get; private set; } = 8;
+    public int? GlobalMaxContextTurns => Math.Max(2, S.GlobalMaxContextTurns);
 
-    /// <summary>
-    /// Global default response-length preset (<see cref="ResponseLengthPreset"/>) applied to every
-    /// participant's turn. Conversations inherit this unless overridden. Keeps roundtable replies
-    /// brief so participants don't write entire chapters on their turn.
-    /// </summary>
-    public string? GlobalResponseLength { get; private set; } = ResponseLengthPreset.Default;
+    /// <summary>Global default response-length preset (<see cref="ResponseLengthPreset"/>).</summary>
+    public string? GlobalResponseLength => ResponseLengthPreset.Normalize(S.GlobalResponseLength);
 
     /// <summary>
     /// When <c>true</c>, every non-Claude participant routes through the Anthropic API, with the
-    /// Claude model roleplaying as that participant's persona. Used as a fallback when other
-    /// providers are rate-limited or down. Each participant retains its unique persona prompt.
+    /// Claude model roleplaying as that participant's persona.
     /// </summary>
-    public bool ClaudeFallbackMode { get; private set; }
+    public bool ClaudeFallbackMode => S.ClaudeFallbackMode;
 
     /// <summary>
-    /// Initializes the settings service by loading from disk or creating default configuration.
+    /// Per-provider non-secret config (type, model, maxTokens) as JSON, keyed by provider id, built from
+    /// <see cref="ThinkTankSettings.Providers"/> on each access.
     /// </summary>
-    public ThinkTankSettingsService()
+    public IReadOnlyDictionary<string, ProviderAuthConfig> ProviderAuth
     {
+        get
+        {
+            var current = S;
+            var map = new Dictionary<string, ProviderAuthConfig>(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in ProviderModels.Ids)
+                map[id] = new ProviderAuthConfig(id, AuthJsonFor(id, current));
+            return map;
+        }
+    }
+
+    /// <summary>Production: ThinkTank's Vault settings for this user and the local key files.</summary>
+    public ThinkTankSettingsService() : this(null, null) { }
+
+    /// <summary>Loads content from Settings.json; app settings and keys come from <paramref name="settings"/> / <paramref name="keys"/>.</summary>
+    public ThinkTankSettingsService(ThinkTankSettingsSource? settings, KeySelector? keys)
+    {
+        this.settings = settings ?? new ThinkTankSettingsSource(MindAttic.Vault.Settings.JsonSettingsStore<ThinkTankSettings>.ForSettingsApp());
+        this.keys = keys ?? ThinkTankKeys.ForCurrentUser();
         MigrateLegacyStorageFolder();
         LoadOrInit();
     }
 
-    private static string SettingsRoot
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank");
+    // Through VaultPaths so the MINDATTIC_VAULT_LOCAL_ROOT override keeps tests out of the real AppData.
+    private static string SettingsRoot => VaultPaths.LocalApp(ThinkTankSettings.AppId);
 
-    private static string LegacySettingsRoot
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "LLMThinkTank");
+    private static string LegacySettingsRoot => VaultPaths.LocalApp("LLMThinkTank");
 
     /// <summary>
     /// One-shot rename of the legacy app-data folder from
     /// <c>%LOCALAPPDATA%\MindAttic\LLMThinkTank</c> to <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c>
     /// after the app rename. Idempotent: only runs when the new folder is missing
-    /// and the legacy one exists, so existing users keep every persisted
-    /// conversation, template, and personality file. Failures are silent —
-    /// worst case the user starts with a fresh folder, which is exactly what
-    /// would have happened without this migration.
+    /// and the legacy one exists.
     /// </summary>
     private static void MigrateLegacyStorageFolder()
     {
@@ -155,21 +147,7 @@ public class ThinkTankSettingsService
     private static string SettingsPath
         => Path.Combine(SettingsRoot, SettingsFileName);
 
-    /// <summary>
-    /// Loads settings from disk if available, otherwise initializes with defaults for all providers.
-    /// <para>
-    /// Credential precedence (highest to lowest):
-    /// <list type="number">
-    ///   <item>Shared MindAttic store at <c>%APPDATA%\MindAttic\LLM\providers.json</c></item>
-    ///   <item>Local <c>Settings.json</c> at <c>%LOCALAPPDATA%\MindAttic\ThinkTank</c></item>
-    ///   <item>Hardcoded defaults (empty API keys, provider-specific model ids and maxTokens)</item>
-    ///   <item><see cref="ProviderDefaults"/> from appsettings + user secrets (only used by <see cref="ResetProvidersToDefaults"/>)</item>
-    /// </list>
-    /// After loading, any normalizations (e.g., backfilled <c>maxTokens</c>) and any
-    /// this-app providers not yet in the shared store are synced upward so sibling
-    /// MindAttic apps immediately see the same credentials.
-    /// </para>
-    /// </summary>
+    /// <summary>Loads templates and conversations from disk, or seeds the default templates.</summary>
     private void LoadOrInit()
     {
         if (TryLoad())
@@ -179,14 +157,7 @@ public class ThinkTankSettingsService
             return;
         }
 
-        ProviderAuth["openai"] = new ProviderAuthConfig("openai", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"gpt-4.1-mini\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["claude"] = new ProviderAuthConfig("claude", "{\n  \"type\": \"anthropic\",\n  \"apiKey\": \"\",\n  \"model\": \"claude-sonnet-4-6\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["gemini"] = new ProviderAuthConfig("gemini", "{\n  \"type\": \"google\",\n  \"apiKey\": \"\",\n  \"model\": \"gemini-2.5-flash\",\n  \"maxTokens\": 2048\n}");
-        ProviderAuth["deepseek"] = new ProviderAuthConfig("deepseek", "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-chat\",\n  \"maxTokens\": 2048\n}");
-
         Templates.AddRange(CreateDefaultTemplates());
-
-        AppearanceTheme = "dark";
         EnsurePersonalityFiles();
         Save();
     }
@@ -243,15 +214,6 @@ public class ThinkTankSettingsService
             if (removedTemplates > 0)
                 changed = true;
 
-            // Drop any provider auth entry that isn't supported by this app. Cross-app entries
-            // live only in the shared %APPDATA%\MindAttic\LLM\providers.json store; they are
-            // never carried in local Settings.json or this app's in-memory ProviderAuth.
-            foreach (var key in ProviderAuth.Keys.Where(k => !supportedProviders.Contains(k)).ToList())
-            {
-                ProviderAuth.Remove(key);
-                changed = true;
-            }
-
             foreach (var d in defaults)
             {
                 if (!Templates.Any(t => t.ProviderId == d.ProviderId && t.IsDefault))
@@ -268,58 +230,6 @@ public class ThinkTankSettingsService
                 if (!Templates[i].IsDefault && defaultNames.Contains(Templates[i].DisplayName))
                 {
                     Templates[i] = Templates[i] with { IsDefault = true };
-                    changed = true;
-                }
-            }
-
-            // Seed missing ProviderAuth entries for new providers
-            var defaultAuths = new Dictionary<string, string>
-            {
-                ["openai"]   = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"gpt-5.4-mini\",\n  \"maxTokens\": 2048\n}",
-                ["claude"]   = "{\n  \"type\": \"anthropic\",\n  \"apiKey\": \"\",\n  \"model\": \"claude-sonnet-5\",\n  \"maxTokens\": 2048\n}",
-                ["gemini"]   = "{\n  \"type\": \"google\",\n  \"apiKey\": \"\",\n  \"model\": \"gemini-3.5-flash\",\n  \"maxTokens\": 2048\n}",
-                ["deepseek"] = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"deepseek-v4-flash\",\n  \"maxTokens\": 2048\n}",
-                ["kimi"]     = "{\n  \"type\": \"bearer\",\n  \"apiKey\": \"\",\n  \"model\": \"kimi-k2\",\n  \"maxTokens\": 2048\n}"
-            };
-
-            foreach (var (providerId, defaultJson) in defaultAuths)
-            {
-                if (!ProviderAuth.ContainsKey(providerId))
-                {
-                    ProviderAuth[providerId] = new ProviderAuthConfig(providerId, defaultJson);
-                    changed = true;
-                    continue;
-                }
-
-                var cfg = ProviderAuth[providerId];
-                try
-                {
-                    var existing = System.Text.Json.Nodes.JsonNode.Parse(cfg.Json)?.AsObject();
-                    var defaultsJson = System.Text.Json.Nodes.JsonNode.Parse(defaultJson)?.AsObject();
-                    if (existing is null || defaultsJson is null)
-                        continue;
-
-                    var providerChanged = false;
-                    foreach (var prop in defaultsJson)
-                    {
-                        if (existing.ContainsKey(prop.Key))
-                            continue;
-
-                        existing[prop.Key] = prop.Value?.DeepClone();
-                        providerChanged = true;
-                    }
-
-                    if (providerChanged)
-                    {
-                        ProviderAuth[providerId] = new ProviderAuthConfig(
-                            providerId,
-                            existing.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-                        changed = true;
-                    }
-                }
-                catch
-                {
-                    ProviderAuth[providerId] = new ProviderAuthConfig(providerId, defaultJson);
                     changed = true;
                 }
             }
@@ -386,14 +296,6 @@ public class ThinkTankSettingsService
             if (dto is null)
                 return false;
 
-            ProviderAuth.Clear();
-            // Null-guard like Templates/Conversations below: an explicit "ProviderAuth": null in
-            // Settings.json would otherwise NRE here, get caught, and silently discard the file's
-            // intact templates and conversations as the app "reinitializes with defaults".
-            if (dto.ProviderAuth is not null)
-                foreach (var kvp in dto.ProviderAuth)
-                    ProviderAuth[kvp.Key] = new ProviderAuthConfig(kvp.Key, kvp.Value ?? "{}");
-
             Templates.Clear();
             if (dto.Templates is not null)
                 Templates.AddRange(dto.Templates);
@@ -402,18 +304,7 @@ public class ThinkTankSettingsService
             if (dto.Conversations is not null)
                 Conversations.AddRange(dto.Conversations);
 
-            AppearanceTheme = string.IsNullOrWhiteSpace(dto.AppearanceTheme) ? "dark" : dto.AppearanceTheme;
-            ControlHeight = dto.ControlHeight ?? 40;
-            Gutter = dto.Gutter ?? 10;
-            BorderRadius = dto.BorderRadius ?? 10;
-            GlobalMaxTokens = dto.GlobalMaxTokens ?? 2048;
-            GlobalMaxRounds = dto.GlobalMaxRounds ?? 10;
-            // Apply the same floor the setter enforces (see SetGlobalMaxContextTurns): a value of
-            // 0/1 persisted by an older build or hand-edited file would otherwise leave participants
-            // with no prior-turn context, violating the documented "at least 2" invariant.
-            GlobalMaxContextTurns = Math.Max(2, dto.GlobalMaxContextTurns ?? 8);
-            GlobalResponseLength = ResponseLengthPreset.Normalize(dto.GlobalResponseLength);
-            ClaudeFallbackMode = dto.ClaudeFallbackMode ?? false;
+            legacyFields = dto.Other;
             return true;
         }
         catch (Exception ex)
@@ -424,15 +315,9 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Serializes the complete application state to <c>Settings.json</c> on disk.
-    /// Called after every mutation to ensure crash-safe persistence.
-    /// <para>
-    /// Holds <see cref="_saveLock"/> so concurrent writers can't interleave, and writes
-    /// to a sibling <c>.tmp</c> file before <see cref="File.Move(string, string, bool)"/>
-    /// so a crash mid-serialize cannot truncate <c>Settings.json</c> to zero bytes.
-    /// Failures are reported to stderr so they don't pass silently like the previous
-    /// blanket <c>catch { }</c>.
-    /// </para>
+    /// Writes templates and conversations to <c>Settings.json</c> (the pre-LAMP setting fields go back
+    /// exactly as they were read). Locked, and written to a sibling <c>.tmp</c> then moved, so a crash
+    /// mid-serialize can't truncate the file.
     /// </summary>
     private void Save()
     {
@@ -442,20 +327,9 @@ public class ThinkTankSettingsService
             {
                 var dto = new PersistedSettings
                 {
-                    // Strip apiKey from every provider blob — credentials are Vault-managed and
-                    // must never be persisted (this also scrubs keys saved by older versions).
-                    ProviderAuth = ProviderAuth.ToDictionary(k => k.Key, v => (string?)StripApiKey(v.Value.Json)),
                     Templates = Templates,
                     Conversations = Conversations,
-                    AppearanceTheme = AppearanceTheme,
-                    ControlHeight = ControlHeight,
-                    Gutter = Gutter,
-                    BorderRadius = BorderRadius,
-                    GlobalMaxTokens = GlobalMaxTokens,
-                    GlobalMaxRounds = GlobalMaxRounds,
-                    GlobalMaxContextTurns = GlobalMaxContextTurns,
-                    GlobalResponseLength = GlobalResponseLength,
-                    ClaudeFallbackMode = ClaudeFallbackMode
+                    Other = legacyFields,
                 };
 
                 var json = System.Text.Json.JsonSerializer.Serialize(dto, new System.Text.Json.JsonSerializerOptions
@@ -476,110 +350,30 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Returns the raw authentication JSON for a provider, or <c>"{}"</c> if not configured.
+    /// Returns the non-secret config JSON (<c>type</c>, <c>model</c>, <c>maxTokens</c>) for a provider ThinkTank
+    /// keeps a model setting for, or <c>"{}"</c> otherwise.
     /// </summary>
     public string GetAuthJson(string providerId)
-        => ProviderAuth.TryGetValue(providerId, out var cfg) ? cfg.Json : "{}";
+        => ProviderModels.Ids.Contains(providerId, StringComparer.OrdinalIgnoreCase) ? AuthJsonFor(providerId, S) : "{}";
 
-    /// <summary>
-    /// Updates a provider's non-secret config (type, model, maxTokens) and persists it to the
-    /// local settings file. Any <c>apiKey</c> in <paramref name="json"/> is stripped — credentials
-    /// are managed centrally in MindAttic Vault and never stored in-app.
-    /// </summary>
-    public void SetAuthJson(string providerId, string json)
+    private static string AuthJsonFor(string providerId, ThinkTankSettings current)
     {
-        ProviderAuth[providerId] = new ProviderAuthConfig(providerId, StripApiKey(json));
-        Save();
-    }
-
-    /// <summary>Returns <paramref name="json"/> with any <c>apiKey</c> field removed.</summary>
-    private static string StripApiKey(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return "{}";
-        try
+        var p = current.Providers?.For(providerId) ?? new ProviderModelSettings();
+        var node = new System.Text.Json.Nodes.JsonObject
         {
-            var node = System.Text.Json.Nodes.JsonNode.Parse(json)?.AsObject();
-            if (node is null) return "{}";
-            node.Remove("apiKey");
-            return node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        }
-        catch
-        {
-            return "{}";
-        }
-    }
-
-    /// <summary>Sets the active appearance theme and persists to disk. Defaults to "dark" if blank.</summary>
-    public void SetAppearanceTheme(string theme)
-    {
-        AppearanceTheme = string.IsNullOrWhiteSpace(theme) ? "dark" : theme;
-        Save();
-    }
-
-    /// <summary>Sets the UI control height in pixels and persists to disk.</summary>
-    public void SetControlHeight(int height)
-    {
-        ControlHeight = height;
-        Save();
-    }
-
-    /// <summary>Sets the gutter spacing in pixels and persists to disk.</summary>
-    public void SetGutter(int px)
-    {
-        Gutter = px;
-        Save();
-    }
-
-    /// <summary>Sets the border radius in pixels and persists to disk.</summary>
-    public void SetBorderRadius(int px)
-    {
-        BorderRadius = px;
-        Save();
-    }
-
-    /// <summary>Sets the global default max tokens and persists to disk.</summary>
-    public void SetGlobalMaxTokens(int tokens)
-    {
-        GlobalMaxTokens = tokens;
-        Save();
-    }
-
-    /// <summary>Sets the global default max rounds and persists to disk.</summary>
-    public void SetGlobalMaxRounds(int rounds)
-    {
-        GlobalMaxRounds = rounds;
-        Save();
+            ["type"] = ProviderModels.TypeFor(providerId),
+            ["model"] = p.Model ?? "",
+            ["maxTokens"] = p.MaxTokens,
+        };
+        return node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
     }
 
     /// <summary>
-    /// Sets how many recent turns to include in each participant's prompt and persists to disk.
-    /// Values below 2 are clamped to 2 since participants need at least one prior turn for context.
+    /// Switches Claude fallback mode (a run control on the chat page) and saves it to ThinkTank's Vault
+    /// settings. When enabled, every non-Claude participant routes through the Anthropic API while keeping
+    /// its unique persona prompt.
     /// </summary>
-    public void SetGlobalMaxContextTurns(int turns)
-    {
-        GlobalMaxContextTurns = turns < 2 ? 2 : turns;
-        Save();
-    }
-
-    /// <summary>
-    /// Sets the global default response-length preset and persists to disk. Unrecognized
-    /// values are coerced to <see cref="ResponseLengthPreset.Default"/>.
-    /// </summary>
-    public void SetGlobalResponseLength(string value)
-    {
-        GlobalResponseLength = ResponseLengthPreset.Normalize(value);
-        Save();
-    }
-
-    /// <summary>
-    /// Toggles Claude fallback mode and persists to disk. When enabled, every non-Claude
-    /// participant routes through the Anthropic API while keeping its unique persona prompt.
-    /// </summary>
-    public void SetClaudeFallbackMode(bool enabled)
-    {
-        ClaudeFallbackMode = enabled;
-        Save();
-    }
+    public void SetClaudeFallbackMode(bool enabled) => settings.Update(s => s.ClaudeFallbackMode = enabled);
 
     /// <summary>Replaces all persisted conversations and writes to disk.</summary>
     public void SetConversations(IEnumerable<PersistedConversation> convos)
@@ -655,107 +449,44 @@ public class ThinkTankSettingsService
     }
 
     /// <summary>
-    /// Fresh <see cref="AppScopedCredentialStore"/> over the shared LLM keyring, namespaced under
-    /// <c>"thinktank-"</c>. Constructed per call (not cached) so it re-resolves
-    /// <c>MINDATTIC_LLM_CREDENTIALS</c> on every access — required by the test harness, which
-    /// redirects that env var to a per-run sandbox in <see cref="TestAssemblySetup"/>-style fixtures.
-    /// </summary>
-    private static AppScopedCredentialStore OwnProviderStore() => new(
-        "thinktank",
-        new LlmCredentialStore(
-            Environment.GetEnvironmentVariable(LlmCredentialStore.DirectoryEnvVar)
-            ?? VaultPaths.RoamingBucket(LlmCredentialStore.Bucket)));
-
-    /// <summary>
-    /// Resolves the API key for a provider. Keys are NOT stored in <c>Settings.json</c> — in
-    /// priority order: an explicit per-call override (used by per-persona auth overrides), then
-    /// THIS APP's own Vault-backed key (<see cref="OwnProviderStore"/> — checked live, so
-    /// saving one in Settings takes effect immediately with no restart), then the runtime value
-    /// resolved from <see cref="Microsoft.Extensions.Configuration.IConfiguration"/> (User Secrets
-    /// / env / App Service / Key Vault → the shared providers.json) via
-    /// <see cref="RuntimeApiKeyOverrides"/>, populated by
-    /// <see cref="SettingsServiceVaultOverlay.OverlayFromConfiguration"/>.
+    /// The key a participant uses: an explicit per-persona override first, else ThinkTank's active key for
+    /// the provider from Vault's shared named lists (its assigned key, or the shared order), skipping keys
+    /// Vault has flagged. Empty when there is none. For call paths that can't be wrapped (Legion voting);
+    /// chat calls go through <see cref="ExecuteWithKeyAsync"/> so they fail over.
     /// </summary>
     public string GetKeyForProvider(string providerId, string? apiKeyOverride)
     {
         if (!string.IsNullOrWhiteSpace(apiKeyOverride))
             return apiKeyOverride;
-
-        var ownKey = OwnProviderStore().GetKey(providerId);
-        if (!string.IsNullOrWhiteSpace(ownKey))
-            return ownKey;
-
-        if (RuntimeApiKeyOverrides.TryGetValue(providerId, out var runtimeKey)
-            && !string.IsNullOrWhiteSpace(runtimeKey))
-            return runtimeKey;
-
-        return "";
+        return keys.GetActiveKey(providerId, ThinkTankSettings.AppId)?.Value ?? "";
     }
 
     /// <summary>
-    /// Saves this app's own Vault-backed override for <paramref name="providerId"/>'s key —
-    /// written under this app's own scoped id (see <see cref="OwnProviderStore"/>), never the
-    /// shared cross-app id, so entering a key here never changes what another MindAttic app
-    /// resolves. Never touches <c>Settings.json</c>. Pass an empty string to clear it and fall
-    /// back to the shared default.
+    /// Runs <paramref name="call"/> with ThinkTank's keys for <paramref name="providerId"/>, failing over to the
+    /// next when one is refused (401/403/quota/429) and flagging it in Vault. With no usable key throws
+    /// <see cref="InvalidOperationException"/> naming the provider (never a key value).
     /// </summary>
-    public void SetProviderKey(string providerId, string apiKey)
-        => OwnProviderStore().SetKey(providerId, apiKey ?? "");
-
-    /// <summary>True if this app has its own Vault-backed override for <paramref name="providerId"/>
-    /// (as opposed to falling back to the shared cross-app default).</summary>
-    public bool HasOwnProviderKey(string providerId)
-        => !string.IsNullOrWhiteSpace(OwnProviderStore().GetKey(providerId));
-
-    /// <summary>
-    /// Builds an auth-config JSON object using <see cref="System.Text.Json.JsonSerializer"/>
-    /// so secrets containing quotes, backslashes, or newlines round-trip safely.
-    /// </summary>
-    public static string BuildAuthJson(string type, string apiKey, string? model, int? maxTokens)
+    public async Task<T> ExecuteWithKeyAsync<T>(string providerId, Func<string, CancellationToken, Task<T>> call, CancellationToken ct = default)
     {
-        var node = new System.Text.Json.Nodes.JsonObject
+        try
         {
-            ["type"] = type,
-            ["apiKey"] = apiKey,
-        };
-        if (!string.IsNullOrWhiteSpace(model))
-            node["model"] = model;
-        if (maxTokens.HasValue)
-            node["maxTokens"] = maxTokens.Value;
-
-        return node.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            return await keys.ExecuteAsync(providerId, ThinkTankSettings.AppId, call, ct).ConfigureAwait(false);
+        }
+        catch (AllKeysFailedException ex)
+        {
+            throw new InvalidOperationException(ex.NoKeys
+                ? $"No API key configured for provider '{providerId}'. Add one in MindAttic Vault."
+                : ex.Message + " Fix or replace the key in MindAttic Vault.", ex);
+        }
     }
 
-    /// <summary>
-    /// Resets all provider auth configs to the values in <see cref="ProviderDefaults"/>.
-    /// Providers without a default entry are left unchanged.
-    /// </summary>
-    public void ResetProvidersToDefaults()
-    {
-        if (ProviderDefaults.Count == 0)
-            return;
-
-        // Apply non-secret config only; apiKeys are Vault-managed and never written to disk.
-        foreach (var (providerId, cfg) in ProviderDefaults)
-            ProviderAuth[providerId] = new ProviderAuthConfig(providerId, StripApiKey(cfg.Json));
-
-        Save();
-    }
-
-    /// <summary>Internal DTO that mirrors the on-disk Settings.json structure for serialization.</summary>
+    /// <summary>Settings.json: the content ThinkTank owns, plus every other field carried through unchanged.</summary>
     private sealed class PersistedSettings
     {
-        public Dictionary<string, string?> ProviderAuth { get; set; } = new();
         public List<ParticipantTemplate>? Templates { get; set; }
         public List<PersistedConversation>? Conversations { get; set; }
-        public string? AppearanceTheme { get; set; }
-        public int? ControlHeight { get; set; }
-        public int? Gutter { get; set; }
-        public int? BorderRadius { get; set; }
-        public int? GlobalMaxTokens { get; set; }
-        public int? GlobalMaxRounds { get; set; }
-        public int? GlobalMaxContextTurns { get; set; }
-        public string? GlobalResponseLength { get; set; }
-        public bool? ClaudeFallbackMode { get; set; }
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, System.Text.Json.JsonElement>? Other { get; set; }
     }
 }

@@ -26,11 +26,11 @@ public class HomePageComponentTests
     }
 
     [Test]
-    public void RendersSettingsLink_PointingAtSettings()
+    public void RendersPersonasLink_PointingAtPersonas()
     {
         var cut = ctx.RenderComponent<Home>();
-        var settingsLink = cut.Find("a.reset-btn");
-        Assert.That(settingsLink.TextContent, Does.Contain("Settings"));
-        Assert.That(settingsLink.GetAttribute("href"), Is.EqualTo("settings"));
+        var personasLink = cut.Find("a.reset-btn");
+        Assert.That(personasLink.TextContent, Does.Contain("Personas"));
+        Assert.That(personasLink.GetAttribute("href"), Is.EqualTo("personas"));
     }
 }

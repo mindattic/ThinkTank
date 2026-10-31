@@ -6,7 +6,7 @@
 const routes = [
   { path: '/',          name: 'Home',          marker: /Open Think Tank/i },
   { path: '/thinktank', name: 'Conversations', marker: /\+ New|Conversation/i },
-  { path: '/settings',  name: 'Settings',      marker: /Personas|Defaults|Appearance/ },
+  { path: '/personas',  name: 'Personas',      marker: /Personas/ },
 ];
 
 const failurePhrases = [
@@ -28,7 +28,7 @@ describe('ThinkTank navigation smoke', () => {
   it('home page boots and shows entry buttons', () => {
     cy.visit('/');
     cy.contains(/Open Think Tank/i, { timeout: 15000 }).should('be.visible');
-    cy.contains('a', /Settings/).should('be.visible');
+    cy.contains('a', /Personas/).should('be.visible');
     assertNoErrorBanner();
   });
 
@@ -40,12 +40,13 @@ describe('ThinkTank navigation smoke', () => {
     });
   });
 
-  it('top-nav exposes Home, Conversations, Settings', () => {
+  it('top-nav exposes Home, Conversations, Personas and the Settings cog', () => {
     cy.visit('/');
     cy.get('nav.top-nav').within(() => {
       cy.contains('a', /^Home$/).should('exist');
       cy.contains('a', /Conversations/).should('exist');
-      cy.contains('a', /Settings/).should('exist');
+      cy.contains('a', /Personas/).should('exist');
+      cy.contains('button', /Settings/).should('exist');
     });
   });
 

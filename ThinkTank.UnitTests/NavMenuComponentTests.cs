@@ -18,13 +18,14 @@ public class NavMenuComponentTests
     [TearDown] public void TearDown() => ctx.Dispose();
 
     [Test]
-    public void RendersBrand_AndThreeNavLinks()
+    public void RendersBrand_ThreePageLinks_TheSettingsCog_AndTheVaultLink()
     {
         var cut = ctx.RenderComponent<NavMenu>();
         Assert.That(cut.Find("a.nav-brand").TextContent, Is.EqualTo("Think Tank"));
 
-        var tabs = cut.FindAll("nav .nav-tabs a");
-        Assert.That(tabs.Count, Is.EqualTo(3));
+        Assert.That(cut.FindAll("nav .nav-tabs a:not(.vault-link)").Count, Is.EqualTo(3));
+        Assert.That(cut.Find("nav .nav-tabs button").TextContent, Does.Contain("Settings"));
+        Assert.That(cut.Find("nav .nav-tabs a.vault-link").GetAttribute("href"), Is.EqualTo("mindattic-vault://open?app=ThinkTank"));
     }
 
     [Test]
@@ -37,6 +38,7 @@ public class NavMenuComponentTests
 
         Assert.That(links, Has.Some.Matches<(string text, string? href)>(l => l.text == "Home" && l.href == ""));
         Assert.That(links, Has.Some.Matches<(string text, string? href)>(l => l.text == "Conversations" && l.href == "thinktank"));
-        Assert.That(links, Has.Some.Matches<(string text, string? href)>(l => l.text == "Settings" && l.href == "settings"));
+        Assert.That(links, Has.Some.Matches<(string text, string? href)>(l => l.text == "Personas" && l.href == "personas"));
+        Assert.That(links.Select(l => l.href), Has.None.EqualTo("settings"), "no in-app settings page (LAMP)");
     }
 }

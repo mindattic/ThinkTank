@@ -21,7 +21,7 @@ public class SettingsServiceTests
                 File.Delete(f);
         }
 
-        sut = new SettingsService();
+        sut = TestLamp.Service();
     }
 
     // ── GetAuthJson ─────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ public class SettingsServiceTests
     [Test]
     public void GetKeyForProvider_NullOverride_ReturnsVaultOverride()
     {
-        sut.RuntimeApiKeyOverrides["testprov"] = "sk-test-123"; // populated from Vault config
+        sut = TestLamp.Service(keys: TestLamp.KeysWith(("testprov", "sk-test-123"))); // Vault's shared named list
 
         var key = sut.GetKeyForProvider("testprov", null);
         Assert.That(key, Is.EqualTo("sk-test-123"));
@@ -72,7 +72,7 @@ public class SettingsServiceTests
     [Test]
     public void GetKeyForProvider_EmptyOverride_ReturnsVaultOverride()
     {
-        sut.RuntimeApiKeyOverrides["testprov"] = "sk-test-456";
+        sut = TestLamp.Service(keys: TestLamp.KeysWith(("testprov", "sk-test-456")));
 
         var key = sut.GetKeyForProvider("testprov", "");
         Assert.That(key, Is.EqualTo("sk-test-456"));
@@ -86,11 +86,16 @@ public class SettingsServiceTests
     }
 
     [Test]
-    public void GetKeyForProvider_MalformedJson_ReturnsEmpty()
+    public void GetKeyForProvider_SkipsAKeyVaultFlaggedAsFailed()
     {
-        sut.ProviderAuth["bad"] = new ProviderAuthConfig("bad", "not json");
-        var key = sut.GetKeyForProvider("bad", null);
-        Assert.That(key, Is.EqualTo(""));
+        var store = TestLamp.KeyStore();
+        store.Add("openai", "bad", "sk-bad");
+        store.Add("openai", "good", "sk-good");
+        var health = new MindAttic.Vault.Credentials.KeyHealthStore(Path.Combine(TestAssemblySetup.VaultRoot, "health-" + Guid.NewGuid().ToString("N")));
+        health.RecordFailure("openai", "bad", MindAttic.Vault.Credentials.KeyFailureKind.Auth, DateTimeOffset.UtcNow);
+        sut = TestLamp.Service(keys: TestLamp.Keys(store, health));
+
+        Assert.That(sut.GetKeyForProvider("openai", null), Is.EqualTo("sk-good"));
     }
 
     // ── ProviderAuth initialization ─────────────────────────────────────
@@ -206,50 +211,6 @@ public class SettingsServiceTests
         Assert.That(sut.BorderRadius, Is.GreaterThanOrEqualTo(0));
     }
 
-    // ── SetAuthJson / GetAuthJson roundtrip ─────────────────────────────
-
-    [Test]
-    public void SetAuthJson_StripsApiKey_PreservesNonSecretConfig()
-    {
-        // SetAuthJson persists only non-secret config; any apiKey is dropped (Vault-managed).
-        sut.SetAuthJson("testprov_roundtrip", "{\"type\":\"bearer\",\"apiKey\":\"test-key\",\"model\":\"gpt-4\"}");
-
-        var result = sut.GetAuthJson("testprov_roundtrip");
-        using var doc = System.Text.Json.JsonDocument.Parse(result);
-        Assert.That(doc.RootElement.TryGetProperty("apiKey", out _), Is.False);
-        Assert.That(doc.RootElement.GetProperty("model").GetString(), Is.EqualTo("gpt-4"));
-
-        // Cleanup
-        sut.ProviderAuth.Remove("testprov_roundtrip");
-    }
-
-    // ── ResetProvidersToDefaults ────────────────────────────────────────
-
-    [Test]
-    public void ResetProvidersToDefaults_EmptyDefaults_IsNoOp()
-    {
-        Assert.That(sut.ProviderDefaults.Count, Is.EqualTo(0));
-        var beforeCount = sut.ProviderAuth.Count;
-
-        sut.ResetProvidersToDefaults();
-
-        Assert.That(sut.ProviderAuth.Count, Is.EqualTo(beforeCount));
-    }
-
-    [Test]
-    public void ResetProvidersToDefaults_AppliesDefaults()
-    {
-        sut.ProviderDefaults["openai"] = new ProviderAuthConfig("openai",
-            "{\"type\":\"bearer\",\"apiKey\":\"default-key\",\"model\":\"gpt-4-default\"}");
-
-        sut.ResetProvidersToDefaults();
-
-        // Non-secret config is applied; the apiKey is stripped (keys come from Vault).
-        var json = sut.GetAuthJson("openai");
-        Assert.That(json, Does.Contain("gpt-4-default"));
-        Assert.That(json, Does.Not.Contain("default-key"));
-    }
-
     // ── SetConversations ────────────────────────────────────────────────
 
     [Test]
@@ -292,62 +253,39 @@ public class SettingsServiceTests
         Assert.That(sut.Templates[0].DisplayName, Is.EqualTo("Custom GPT"));
     }
 
-    // ── Appearance settings mutations ───────────────────────────────────
+    // ── App settings come from ThinkTank's Vault settings (LAMP, TT-T27) ──
 
     [Test]
-    public void SetAppearanceTheme_Updates()
+    public void AppSettings_AreReadFromTheVaultSettings()
     {
-        sut.SetAppearanceTheme("neon");
-        Assert.That(sut.AppearanceTheme, Is.EqualTo("neon"));
+        var source = TestLamp.Settings(s =>
+        {
+            s.Theme = "neon"; s.ControlHeight = 50; s.Gutter = 20; s.BorderRadius = 16;
+            s.GlobalMaxTokens = 4096; s.GlobalMaxRounds = 5;
+        });
+        var settings = new SettingsService(source, TestLamp.Keys());
+
+        Assert.That(settings.AppearanceTheme, Is.EqualTo("neon"));
+        Assert.That(settings.ControlHeight, Is.EqualTo(50));
+        Assert.That(settings.Gutter, Is.EqualTo(20));
+        Assert.That(settings.BorderRadius, Is.EqualTo(16));
+        Assert.That(settings.GlobalMaxTokens, Is.EqualTo(4096));
+        Assert.That(settings.GlobalMaxRounds, Is.EqualTo(5));
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public void AppearanceTheme_BlankReadsAsDark(string theme)
+    {
+        Assert.That(TestLamp.Service(s => s.Theme = theme).AppearanceTheme, Is.EqualTo("dark"));
     }
 
     [Test]
-    public void SetAppearanceTheme_BlankDefaultsToDark()
+    public void App_settings_have_no_setters_left()
     {
-        sut.SetAppearanceTheme("");
-        Assert.That(sut.AppearanceTheme, Is.EqualTo("dark"));
-    }
-
-    [Test]
-    public void SetAppearanceTheme_WhitespaceDefaultsToDark()
-    {
-        sut.SetAppearanceTheme("   ");
-        Assert.That(sut.AppearanceTheme, Is.EqualTo("dark"));
-    }
-
-    [Test]
-    public void SetControlHeight_Updates()
-    {
-        sut.SetControlHeight(50);
-        Assert.That(sut.ControlHeight, Is.EqualTo(50));
-    }
-
-    [Test]
-    public void SetGutter_Updates()
-    {
-        sut.SetGutter(20);
-        Assert.That(sut.Gutter, Is.EqualTo(20));
-    }
-
-    [Test]
-    public void SetBorderRadius_Updates()
-    {
-        sut.SetBorderRadius(16);
-        Assert.That(sut.BorderRadius, Is.EqualTo(16));
-    }
-
-    [Test]
-    public void SetGlobalMaxTokens_Updates()
-    {
-        sut.SetGlobalMaxTokens(4096);
-        Assert.That(sut.GlobalMaxTokens, Is.EqualTo(4096));
-    }
-
-    [Test]
-    public void SetGlobalMaxRounds_Updates()
-    {
-        sut.SetGlobalMaxRounds(5);
-        Assert.That(sut.GlobalMaxRounds, Is.EqualTo(5));
+        foreach (var name in new[] { "SetAppearanceTheme", "SetControlHeight", "SetGutter", "SetBorderRadius", "SetGlobalMaxTokens",
+                     "SetGlobalMaxRounds", "SetGlobalMaxContextTurns", "SetGlobalResponseLength", "SetAuthJson", "ResetProvidersToDefaults", "SetProviderKey" })
+            Assert.That(typeof(ThinkTankSettingsService).GetMethod(name), Is.Null, name);
     }
 
     // ── ClaudeFallbackMode ──────────────────────────────────────────────
@@ -376,9 +314,12 @@ public class SettingsServiceTests
         // Temporarily clear the test sandbox override so we observe the real default path.
         const string envVar = "MINDATTIC_LLM_CREDENTIALS";
         var saved = Environment.GetEnvironmentVariable(envVar);
+        var savedRoaming = Environment.GetEnvironmentVariable(MindAttic.Vault.Paths.VaultPaths.RoamingRootEnvVar);
         try
         {
             Environment.SetEnvironmentVariable(envVar, null);
+            // Path math only (nothing is written): clear the assembly's temp Vault root to see the real default.
+            Environment.SetEnvironmentVariable(MindAttic.Vault.Paths.VaultPaths.RoamingRootEnvVar, null);
 
             var expectedRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -391,6 +332,7 @@ public class SettingsServiceTests
         finally
         {
             Environment.SetEnvironmentVariable(envVar, saved);
+            Environment.SetEnvironmentVariable(MindAttic.Vault.Paths.VaultPaths.RoamingRootEnvVar, savedRoaming);
         }
     }
 

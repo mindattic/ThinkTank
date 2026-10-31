@@ -4,63 +4,27 @@ using ThinkTank.Core.Services;
 
 namespace ThinkTank.UnitTests;
 
+/// <summary>
+/// AppearanceService reads ThinkTank's Vault settings (LAMP, TT-T27): values come from the settings file,
+/// clamped to their ranges; a change saved in Vault shows on the next read.
+/// </summary>
 [TestFixture]
 public class AppearanceServiceTests
 {
-    private SettingsService settings = null!;
-    private AppearanceService sut = null!;
-
-    [SetUp]
-    public void SetUp()
+    private static AppearanceService With(Action<ThinkTankSettings> change, out ThinkTankSettingsSource source)
     {
-        settings = new SettingsService();
-        sut = new AppearanceService(settings);
-    }
-
-    // ── Constructor ─────────────────────────────────────────────────────
-
-    [Test]
-    public void Constructor_LoadsFromSettings()
-    {
-        Assert.That(sut.Mode, Is.TypeOf<AppearanceMode>());
-        Assert.That(sut.ControlHeight, Is.GreaterThanOrEqualTo(28).And.LessThanOrEqualTo(60));
-        Assert.That(sut.Gutter, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(30));
-        Assert.That(sut.BorderRadius, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(24));
-    }
-
-    // ── SetMode ─────────────────────────────────────────────────────────
-
-    [Test]
-    public void SetMode_ChangesMode()
-    {
-        sut.SetMode(AppearanceMode.Neon);
-        Assert.That(sut.Mode, Is.EqualTo(AppearanceMode.Neon));
+        source = TestLamp.Settings(change);
+        return new AppearanceService(new SettingsService(source, TestLamp.Keys()));
     }
 
     [Test]
-    public void SetMode_FiresChangedEvent()
+    public void Defaults_AreTodaysDefaults()
     {
-        var fired = false;
-        sut.Changed += () => fired = true;
-        sut.SetMode(AppearanceMode.Matrix);
-        Assert.That(fired, Is.True);
-    }
-
-    [Test]
-    public void SetMode_SameValue_DoesNotFireChanged()
-    {
-        sut.SetMode(AppearanceMode.Dark); // already Dark
-        var fired = false;
-        sut.Changed += () => fired = true;
-        sut.SetMode(AppearanceMode.Dark);
-        Assert.That(fired, Is.False);
-    }
-
-    [Test]
-    public void SetMode_PersistsToSettings()
-    {
-        sut.SetMode(AppearanceMode.Dracula);
-        Assert.That(settings.AppearanceTheme, Is.EqualTo("dracula"));
+        var sut = new AppearanceService(TestLamp.Service());
+        Assert.That(sut.Mode, Is.EqualTo(AppearanceMode.Dark));
+        Assert.That(sut.ControlHeight, Is.EqualTo(40));
+        Assert.That(sut.Gutter, Is.EqualTo(10));
+        Assert.That(sut.BorderRadius, Is.EqualTo(10));
     }
 
     // ── Theme round-trips through persistence (regression) ──────────────
@@ -74,132 +38,47 @@ public class AppearanceServiceTests
     [TestCase("ocean", AppearanceMode.Ocean)]
     [TestCase("forest", AppearanceMode.Forest)]
     [TestCase("mono", AppearanceMode.Mono)]
-    public void Constructor_RestoresEveryPersistedTheme(string theme, AppearanceMode expected)
+    public void Mode_RestoresEverySavedTheme(string theme, AppearanceMode expected)
     {
-        settings.SetAppearanceTheme(theme);
+        var sut = With(s => s.Theme = theme, out _);
+        Assert.That(sut.Mode, Is.EqualTo(expected));
+    }
 
-        var restored = new AppearanceService(settings);
-
-        Assert.That(restored.Mode, Is.EqualTo(expected));
+    [TestCase("not-a-real-theme")]
+    [TestCase("3")]
+    [TestCase("")]
+    public void Mode_UnknownTheme_FallsBackToDark(string theme)
+    {
+        var sut = With(s => s.Theme = theme, out _);
+        Assert.That(sut.Mode, Is.EqualTo(AppearanceMode.Dark));
     }
 
     [Test]
-    public void Constructor_UnknownTheme_FallsBackToDark()
+    public void Values_FollowAChangeSavedInVault()
     {
-        settings.SetAppearanceTheme("not-a-real-theme");
+        var sut = With(_ => { }, out var source);
+        source.Store.Update(s => { s.Theme = "dracula"; s.ControlHeight = 45; s.Gutter = 15; s.BorderRadius = 12; });
 
-        var restored = new AppearanceService(settings);
-
-        Assert.That(restored.Mode, Is.EqualTo(AppearanceMode.Dark));
-    }
-
-    // ── SetControlHeight ────────────────────────────────────────────────
-
-    [Test]
-    public void SetControlHeight_ClampsToMin()
-    {
-        sut.SetControlHeight(10);
-        Assert.That(sut.ControlHeight, Is.EqualTo(28));
-    }
-
-    [Test]
-    public void SetControlHeight_ClampsToMax()
-    {
-        sut.SetControlHeight(100);
-        Assert.That(sut.ControlHeight, Is.EqualTo(60));
-    }
-
-    [Test]
-    public void SetControlHeight_AcceptsValidValue()
-    {
-        sut.SetControlHeight(45);
+        Assert.That(sut.Mode, Is.EqualTo(AppearanceMode.Dracula));
         Assert.That(sut.ControlHeight, Is.EqualTo(45));
-    }
-
-    [Test]
-    public void SetControlHeight_SameValue_DoesNotFireChanged()
-    {
-        sut.SetControlHeight(40); // default is 40
-        var fired = false;
-        sut.Changed += () => fired = true;
-        sut.SetControlHeight(40);
-        Assert.That(fired, Is.False);
-    }
-
-    [Test]
-    public void SetControlHeight_FiresChangedEvent()
-    {
-        var fired = false;
-        sut.Changed += () => fired = true;
-        sut.SetControlHeight(50);
-        Assert.That(fired, Is.True);
-    }
-
-    // ── SetGutter ───────────────────────────────────────────────────────
-
-    [Test]
-    public void SetGutter_ClampsToMin()
-    {
-        sut.SetGutter(-5);
-        Assert.That(sut.Gutter, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void SetGutter_ClampsToMax()
-    {
-        sut.SetGutter(50);
-        Assert.That(sut.Gutter, Is.EqualTo(30));
-    }
-
-    [Test]
-    public void SetGutter_AcceptsValidValue()
-    {
-        sut.SetGutter(15);
         Assert.That(sut.Gutter, Is.EqualTo(15));
-    }
-
-    [Test]
-    public void SetGutter_SameValue_DoesNotFireChanged()
-    {
-        sut.SetGutter(15); // set to known value first
-        var fired = false;
-        sut.Changed += () => fired = true;
-        sut.SetGutter(15); // same value again
-        Assert.That(fired, Is.False);
-    }
-
-    // ── SetBorderRadius ─────────────────────────────────────────────────
-
-    [Test]
-    public void SetBorderRadius_ClampsToMin()
-    {
-        sut.SetBorderRadius(-1);
-        Assert.That(sut.BorderRadius, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void SetBorderRadius_ClampsToMax()
-    {
-        sut.SetBorderRadius(50);
-        Assert.That(sut.BorderRadius, Is.EqualTo(24));
-    }
-
-    [Test]
-    public void SetBorderRadius_AcceptsValidValue()
-    {
-        sut.SetBorderRadius(12);
         Assert.That(sut.BorderRadius, Is.EqualTo(12));
     }
 
-    [Test]
-    public void SetBorderRadius_SameValue_DoesNotFireChanged()
-    {
-        sut.SetBorderRadius(12); // set to known value first
-        var fired = false;
-        sut.Changed += () => fired = true;
-        sut.SetBorderRadius(12); // same value again
-        Assert.That(fired, Is.False);
-    }
+    [TestCase(10, 28)]
+    [TestCase(100, 60)]
+    public void ControlHeight_IsClamped(int saved, int expected) =>
+        Assert.That(With(s => s.ControlHeight = saved, out _).ControlHeight, Is.EqualTo(expected));
+
+    [TestCase(-5, 0)]
+    [TestCase(99, 30)]
+    public void Gutter_IsClamped(int saved, int expected) =>
+        Assert.That(With(s => s.Gutter = saved, out _).Gutter, Is.EqualTo(expected));
+
+    [TestCase(-1, 0)]
+    [TestCase(50, 24)]
+    public void BorderRadius_IsClamped(int saved, int expected) =>
+        Assert.That(With(s => s.BorderRadius = saved, out _).BorderRadius, Is.EqualTo(expected));
 
     // ── ToThemeValue ────────────────────────────────────────────────────
 

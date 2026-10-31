@@ -31,8 +31,7 @@ public class NameGeneratorServiceTests
                 File.Delete(f);
         }
 
-        settings = new SettingsService();
-        settings.RuntimeApiKeyOverrides["openai"] = "test-api-key"; // keys come from Vault overlay
+        settings = TestLamp.Service(keys: TestLamp.KeysWith(("openai", "test-api-key"))); // keys come from Vault
 
         handler = new ScriptedHandler();
         var legion = new LegionClient(new HttpClient(handler));

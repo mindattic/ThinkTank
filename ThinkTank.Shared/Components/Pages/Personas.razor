@@ -1,4 +1,4 @@
-@page "/settings"
+@page "/personas"
 @namespace ThinkTank.Shared.Components.Pages
 @using Microsoft.AspNetCore.Components.Web
 @inject SettingsService ThinkTankSettings
@@ -8,105 +8,15 @@
 @inject NameGeneratorService NameGen
 @implements IDisposable
 
-<PageTitle>Settings</PageTitle>
+@* LAMP (TT-T27): ThinkTank's app-level settings (defaults, appearance, provider models, keys) are edited only
+   in MindAttic Vault (the Settings cog in the menu). Personas are ThinkTank content and stay here. *@
+<PageTitle>Personas</PageTitle>
 
 <div class="settings-container">
     <div class="settings-grid">
         <div class="settings-panel">
-            <h1 class="visually-hidden">Settings</h1>
-            <div class="settings-tabs" role="tablist" aria-label="Settings sections" @onkeydown="OnSettingsTabsKeyDown">
-                <button id="tab-personas" class="settings-tab @(_activeSection == SettingsSection.Providers ? "active" : "")"
-                        role="tab" aria-selected="@(_activeSection == SettingsSection.Providers ? "true" : "false")"
-                        aria-controls="panel-personas" tabindex="@(_activeSection == SettingsSection.Providers ? "0" : "-1")"
-                        @onclick="(() => _activeSection = SettingsSection.Providers)">
-                    Personas
-                </button>
-                <button id="tab-defaults" class="settings-tab @(_activeSection == SettingsSection.Defaults ? "active" : "")"
-                        role="tab" aria-selected="@(_activeSection == SettingsSection.Defaults ? "true" : "false")"
-                        aria-controls="panel-defaults" tabindex="@(_activeSection == SettingsSection.Defaults ? "0" : "-1")"
-                        @onclick="(() => _activeSection = SettingsSection.Defaults)">
-                    Defaults
-                </button>
-                <button id="tab-appearance" class="settings-tab @(_activeSection == SettingsSection.Appearance ? "active" : "")"
-                        role="tab" aria-selected="@(_activeSection == SettingsSection.Appearance ? "true" : "false")"
-                        aria-controls="panel-appearance" tabindex="@(_activeSection == SettingsSection.Appearance ? "0" : "-1")"
-                        @onclick="(() => _activeSection = SettingsSection.Appearance)">
-                    Appearance
-                </button>
-            </div>
-
-            @if (_activeSection == SettingsSection.Defaults)
-            {
-                <div id="panel-defaults" role="tabpanel" aria-labelledby="tab-defaults" class="settings-form" style="padding:1rem;">
-                    <label for="defaults-max-tokens">Global Max Tokens</label>
-                    <p id="defaults-max-tokens-hint" class="options-hint" style="margin-top:0;">Default max tokens per response. Individual conversations can override this.</p>
-                    <input id="defaults-max-tokens" type="number" min="64" max="32768" step="64"
-                           value="@(ThinkTankSettings.GlobalMaxTokens ?? 2048)"
-                           aria-describedby="defaults-max-tokens-hint"
-                           @onchange="OnGlobalMaxTokensChanged" />
-
-                    <label for="defaults-max-rounds" style="margin-top:1rem;">Global Max Rounds</label>
-                    <p id="defaults-max-rounds-hint" class="options-hint" style="margin-top:0;">Default max rounds per conversation. Individual conversations can override this.</p>
-                    <input id="defaults-max-rounds" type="number" min="1" max="999" step="1"
-                           value="@(ThinkTankSettings.GlobalMaxRounds ?? 10)"
-                           aria-describedby="defaults-max-rounds-hint"
-                           @onchange="OnGlobalMaxRoundsChanged" />
-
-                    <label for="defaults-response-length" style="margin-top:1rem;">Global Response Length</label>
-                    <p id="defaults-response-length-hint" class="options-hint" style="margin-top:0;">How much each participant writes per turn. Keeps replies brief so participants don't write chapters. Individual conversations can override this.</p>
-                    <select id="defaults-response-length"
-                            value="@ResponseLengthPreset.Normalize(ThinkTankSettings.GlobalResponseLength)"
-                            aria-describedby="defaults-response-length-hint"
-                            @onchange="OnGlobalResponseLengthChanged">
-                        @foreach (var opt in ResponseLengthPreset.Options)
-                        {
-                            <option value="@opt.Value">@opt.Label (@opt.Hint)</option>
-                        }
-                    </select>
-
-                    <label for="defaults-claude-fallback" style="margin-top:1.25rem; display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                        <input id="defaults-claude-fallback" type="checkbox"
-                               checked="@ThinkTankSettings.ClaudeFallbackMode"
-                               aria-describedby="defaults-claude-fallback-hint"
-                               @onchange="OnClaudeFallbackToggled" />
-                        Claude fallback mode
-                    </label>
-                    <p id="defaults-claude-fallback-hint" class="options-hint" style="margin-top:0;">
-                        When other providers are rate-limited or down, route every participant through the Anthropic API.
-                        Each persona stays unique — Claude roleplays as ChatGPT, Gemini, Grok, etc. using each participant's
-                        personality prompt. Only the Claude API key is used.
-                    </p>
-
-                    <p style="margin-top:1.25rem;"><strong>API keys</strong></p>
-                    <p class="options-hint" style="margin-top:0;">
-                        Bring your own key for any provider below — it's used by ThinkTank only and never
-                        changes what another MindAttic application resolves. Leave a field blank to fall back
-                        to the shared default, if one is configured on this machine (User Secrets, environment
-                        / App Service, or the shared file <code>@SharedCredentialsPath</code>).
-                    </p>
-                    @foreach (var p in ProviderOptions)
-                    {
-                        <div class="settings-row" style="margin-top:0.5rem; align-items:center; gap:0.5rem;">
-                            <label for="@("provider-key-" + p.Id)" style="min-width:6rem;">@p.Name</label>
-                            <input id="@("provider-key-" + p.Id)" type="password" style="flex:1;"
-                                   value="@GetProviderKeyInput(p.Id)"
-                                   @oninput="@(e => SetProviderKeyInput(p.Id, e.Value?.ToString() ?? ""))"
-                                   placeholder="@(ThinkTankSettings.HasOwnProviderKey(p.Id) ? "Configured — leave blank to keep" : "Not configured")" />
-                            <button class="start-btn" @onclick="@(() => SaveProviderKey(p.Id))">Save</button>
-                            <button class="reset-btn" @onclick="@(() => ClearProviderKey(p.Id))">Clear</button>
-                        </div>
-                    }
-                </div>
-            }
-            else if (_activeSection == SettingsSection.Appearance)
-            {
-                <div id="panel-appearance" role="tabpanel" aria-labelledby="tab-appearance">
-                    <SettingsAppearance />
-                </div>
-            }
-            else
-            {
-                <div id="panel-personas" role="tabpanel" aria-labelledby="tab-personas">
+            <h1 class="visually-hidden">Personas</h1>
+                <div id="panel-personas">
                 <div class="templates-split">
                     <div class="templates-left">
                         <div class="templates-left-header">
@@ -180,7 +90,6 @@
                     </div>
                 </div>
                 </div>
-            }
         </div>
 
 
@@ -191,10 +100,8 @@
 
 @code {
     private ThinkTank.Shared.Components.Shared.ConfirmationDialog _confirmDialog = default!;
-    private enum SettingsSection { Providers, Defaults, Appearance }
 
     private string? _activeTemplateId;
-    private SettingsSection _activeSection = SettingsSection.Providers;
     private bool _testing;
     private string? _lastError;
     private bool _generating;
@@ -215,31 +122,6 @@
 
     private void OnChatChanged() => InvokeAsync(StateHasChanged);
 
-    private void OnSettingsTabsKeyDown(KeyboardEventArgs e)
-    {
-        var sections = new[] { SettingsSection.Providers, SettingsSection.Defaults, SettingsSection.Appearance };
-        var idx = Array.IndexOf(sections, _activeSection);
-        if (idx < 0) return;
-
-        switch (e.Key)
-        {
-            case "ArrowRight":
-            case "ArrowDown":
-                _activeSection = sections[(idx + 1) % sections.Length];
-                break;
-            case "ArrowLeft":
-            case "ArrowUp":
-                _activeSection = sections[(idx - 1 + sections.Length) % sections.Length];
-                break;
-            case "Home":
-                _activeSection = sections[0];
-                break;
-            case "End":
-                _activeSection = sections[^1];
-                break;
-        }
-    }
-
     private void SelectTemplate(string templateId)
     {
         SaveActiveTemplate();
@@ -249,51 +131,6 @@
 
     private string GetProviderAvatar(string providerId)
         => ThinkTank.Models.FirstOrDefault(m => m.Id == providerId)?.Avatar ?? "?";
-
-    private void OnGlobalMaxTokensChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var val) && val >= 64 && val <= 32768)
-            ThinkTankSettings.SetGlobalMaxTokens(val);
-    }
-
-    private void OnGlobalMaxRoundsChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var val) && val >= 1 && val <= 999)
-            ThinkTankSettings.SetGlobalMaxRounds(val);
-    }
-
-    private void OnGlobalResponseLengthChanged(ChangeEventArgs e)
-        => ThinkTankSettings.SetGlobalResponseLength(ResponseLengthPreset.Normalize(e.Value?.ToString()));
-
-    private void OnClaudeFallbackToggled(ChangeEventArgs e)
-    {
-        var enabled = e.Value is bool b ? b : bool.TryParse(e.Value?.ToString(), out var parsed) && parsed;
-        ThinkTankSettings.SetClaudeFallbackMode(enabled);
-    }
-
-    private string SharedCredentialsPath => MindAtticCredentialStore.ProvidersFilePath;
-
-    private readonly Dictionary<string, string> _providerKeyInputs = new();
-
-    private string GetProviderKeyInput(string providerId)
-        => _providerKeyInputs.TryGetValue(providerId, out var v) ? v : "";
-
-    private void SetProviderKeyInput(string providerId, string value)
-        => _providerKeyInputs[providerId] = value;
-
-    private void SaveProviderKey(string providerId)
-    {
-        var value = GetProviderKeyInput(providerId);
-        if (string.IsNullOrWhiteSpace(value)) return;
-        ThinkTankSettings.SetProviderKey(providerId, value);
-        _providerKeyInputs[providerId] = ""; // never left sitting in the field once saved
-    }
-
-    private void ClearProviderKey(string providerId)
-    {
-        ThinkTankSettings.SetProviderKey(providerId, "");
-        _providerKeyInputs[providerId] = "";
-    }
 
     private async Task AddCustomPersona()
     {
@@ -495,7 +332,7 @@
         var effectiveKey = ThinkTankSettings.GetKeyForProvider(_activeTemplate.ProviderId, null);
         if (string.IsNullOrWhiteSpace(effectiveKey))
         {
-            _lastError = "API key is required. Please check your provider settings.";
+            _lastError = "API key is required. Add one for this provider in MindAttic Vault (Settings cog).";
             return;
         }
 

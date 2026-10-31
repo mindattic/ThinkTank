@@ -6,8 +6,17 @@
     <div class="nav-tabs" role="list">
         <NavLink class="settings-tab nav-tab" href="" Match="NavLinkMatch.All" aria-current="@AriaCurrent("")">Home</NavLink>
         <NavLink class="settings-tab nav-tab" href="thinktank" aria-current="@AriaCurrent("thinktank")">Conversations</NavLink>
-        <NavLink class="settings-tab nav-tab" href="settings" aria-current="@AriaCurrent("settings")">Settings</NavLink>
+        <NavLink class="settings-tab nav-tab" href="personas" aria-current="@AriaCurrent("personas")">Personas</NavLink>
+        @* LAMP (TT-T27): settings are edited only in MindAttic Vault. The cog opens Vault at ThinkTank's tab from
+           the server (which runs on the user's machine); the link is the mindattic-vault:// fallback for a
+           browser on another machine. *@
+        <button type="button" class="settings-tab nav-tab" @onclick="OpenSettings" title="Open ThinkTank's settings in MindAttic Vault">&#9881; Settings</button>
+        <a class="settings-tab nav-tab vault-link" href="@SettingsCog.Link()" title="Open ThinkTank's settings in MindAttic Vault (link)" aria-label="Open ThinkTank's settings in MindAttic Vault (link)">&#8599;</a>
     </div>
+    @if (!string.IsNullOrEmpty(settingsMessage))
+    {
+        <div class="nav-status" role="status">@settingsMessage <a href="@SettingsCog.Link()">Open Vault</a></div>
+    }
 </nav>
 
 @code {
@@ -24,6 +33,15 @@
         var current = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/');
         var target = relativePath.Trim('/');
         return string.Equals(current, target, StringComparison.OrdinalIgnoreCase) ? "page" : null;
+    }
+
+    private string? settingsMessage;
+
+    /// <summary>The Settings cog: opens MindAttic Vault at ThinkTank's tab (no settings editor in ThinkTank).</summary>
+    private void OpenSettings()
+    {
+        var result = SettingsCog.Open();
+        settingsMessage = result.Opened ? null : result.Message;
     }
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
