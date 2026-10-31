@@ -63,8 +63,13 @@ public static class ChatStorage
         => _chatLocks.GetOrAdd(chatId, _ => new SemaphoreSlim(1, 1));
 
     /// <summary>Returns the folder path for a specific conversation's persistent data.</summary>
+    /// <remarks>
+    /// <c>%LOCALAPPDATA%\MindAttic\ThinkTank\Conversations\{chatId}</c>, resolved through
+    /// <see cref="MindAttic.Vault.Paths.VaultPaths.LocalApp"/> so <c>MINDATTIC_VAULT_LOCAL_ROOT</c> moves it too: the
+    /// test suite's temp Vault roots then keep chat files out of the user's real data (TT-T28, M.VALT-LAW-6).
+    /// </remarks>
     public static string GetChatFolder(string chatId)
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MindAttic", "ThinkTank", "Conversations", chatId);
+        => Path.Combine(MindAttic.Vault.Paths.VaultPaths.LocalApp("ThinkTank"), "Conversations", chatId);
 
     /// <summary>Returns the path to a conversation's append-only JSONL log.</summary>
     public static string GetChatJsonlPath(string chatId)

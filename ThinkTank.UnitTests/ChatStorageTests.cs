@@ -33,6 +33,14 @@ public class ChatStorageTests
     }
 
     [Test]
+    public void GetChatFolder_FollowsTheVaultLocalRoot_SoTestsNeverTouchTheRealConversations()
+    {
+        // TT-T28: these tests create and delete chat folders; they must land under the temp Vault local root
+        // TestAssemblySetup sets, never the user's real %LOCALAPPDATA%\MindAttic\ThinkTank\Conversations.
+        Assert.That(chatFolder, Is.EqualTo(Path.Combine(TestAssemblySetup.VaultRoot, "local", "ThinkTank", "Conversations", testChatId)));
+    }
+
+    [Test]
     public void GetChatJsonPath_EndsWith_ChatJson()
     {
         var path = ChatStorage.GetChatJsonPath("abc123");
