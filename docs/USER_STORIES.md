@@ -130,3 +130,10 @@ updated: 2026-10-03
 | TT-T20 | 2026-10-20 | docs | open | Publish ThinkTank docs to GitHub Pages via the shared Agency DocFX pipeline: run adopt-docs-site.ps1 (README.md as home page, docs/*.md as articles, API reference only where the code builds in CI), enable Pages with build_type=workflow, set the repo homepage URL, retire tools/build-readme.ps1 and README.htm, confirm the docs Actions run is green and https://mindattic.github.io/ThinkTank/ returns 200. Depends on MAT-T8. | — |
 | TT-T21 | 2026-10-22 | docs | closed | Update USER_STORIES.md | — |
 | TT-T22 | 2026-10-24 | docs | closed | Update USER_STORIES.md | — |
+| TT-T23 | 2026-10-30 | feature | wont-do | Extract ThinkTank's settings into a Vault Dashboard settings-tab package | superseded by Epic E redesign: target MindAttic.Vault.Desktop, not Vault Dashboard |
+| TT-T24 | 2026-10-30 | chore | wont-do | Remove ThinkTank's own settings page and wire its cog to open Vault Dashboard instead | superseded by Epic E redesign: target MindAttic.Vault.Desktop, not Vault Dashboard |
+| TT-T25 | 2026-10-30 | feature | wont-do | Adapt ThinkTank's settings component to the Components settings-tab contract | withdrawn: plan rejected by owner 2026-10-31, see M.VALT-T26 |
+| TT-T26 | 2026-10-30 | chore | wont-do | Remove ThinkTank's standalone settings route, wire its cog to MindAttic.Vault.Desktop | withdrawn: plan rejected by owner 2026-10-31, see M.VALT-T26 |
+| TT-T27 | 2026-10-31 | feature | closed | LAMP: move ThinkTank's app-level settings and keys to MindAttic.Vault.Desktop (manifest, LoadOrSeed, shared named keys, cog opens Vault) | 784cde1 ThinkTankSettingTests+ThinkTankLampTests (39/39; full suite 300/300) |
+| TT-T28 | 2026-10-31 | fix | closed | ThinkTank tests write the real %LOCALAPPDATA%\MindAttic\ThinkTank\Conversations: ChatStorage.GetChatFolder ignores MINDATTIC_VAULT_LOCAL_ROOT, so ChatStorageTests/ChatLogServiceTests create and delete chat folders in the user's real data; resolve it through VaultPaths.LocalApp (found by M.VALT-T67) | 0a5ea28 |
+| TT-T29 | 2026-10-31 | docs | closed | Update USER_STORIES.md | — |
