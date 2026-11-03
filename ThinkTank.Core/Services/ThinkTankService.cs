@@ -71,6 +71,39 @@ public class ThinkTankService
     /// </summary>
     public event Action<string, string, bool>? Diagnostics;
 
+    /// <summary>
+    /// The same diagnostics, tagged with the chat (and the caller that opened the scope) the
+    /// call was made for, via <see cref="BeginDiagnosticsScope"/>. This service is a singleton
+    /// shared by every Blazor circuit, so a page subscribes here and keeps only the events
+    /// for its own calls; <see cref="Diagnostics"/> carries no chat id, so a subscriber can't
+    /// tell which tab (or browser tab) a call belonged to. Untagged calls have a null ChatId.
+    /// </summary>
+    public event Action<DiagnosticsEvent>? DiagnosticsRaised;
+
+    private static readonly AsyncLocal<DiagnosticsScope?> currentScope = new();
+
+    /// <summary>
+    /// Tags every diagnostic raised by calls made inside the returned scope (on this async
+    /// flow) with <paramref name="chatId"/> and <paramref name="origin"/>. Dispose to end it.
+    /// </summary>
+    public static IDisposable BeginDiagnosticsScope(string chatId, object? origin = null)
+    {
+        var previous = currentScope.Value;
+        var scope = new DiagnosticsScope(chatId, origin, previous);
+        currentScope.Value = scope;
+        return scope;
+    }
+
+    private sealed class DiagnosticsScope(string chatId, object? origin, DiagnosticsScope? previous) : IDisposable
+    {
+        public string ChatId { get; } = chatId;
+        public object? Origin { get; } = origin;
+        public void Dispose()
+        {
+            if (ReferenceEquals(currentScope.Value, this)) currentScope.Value = previous;
+        }
+    }
+
     private void EmitDiagnostics(string providerId, string model, string text, bool isError, string? errorMessage = null)
     {
         try
@@ -84,6 +117,8 @@ public class ThinkTankService
                 error = errorMessage,
             }, new JsonSerializerOptions { WriteIndented = true });
             Diagnostics?.Invoke(providerId, payload, isError);
+            var scope = currentScope.Value;
+            DiagnosticsRaised?.Invoke(new DiagnosticsEvent(scope?.ChatId, scope?.Origin, providerId, payload, isError));
         }
         catch (Exception ex)
         {
@@ -382,3 +417,10 @@ public class ThinkTankService
         return text.TrimStart();
     }
 }
+
+/// <summary>
+/// One diagnostics snapshot from <see cref="ThinkTankService.DiagnosticsRaised"/>: the chat and
+/// caller it belongs to (null when the call was made outside a diagnostics scope), the provider,
+/// the JSON payload, and the error flag.
+/// </summary>
+public sealed record DiagnosticsEvent(string? ChatId, object? Origin, string ProviderId, string Payload, bool IsError);

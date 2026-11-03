@@ -572,7 +572,7 @@
     protected override void OnInitialized()
     {
         Conversations.Changed += OnConversationsChanged;
-        ThinkTankService.Diagnostics += OnDiagnostics;
+        ThinkTankService.DiagnosticsRaised += OnDiagnostics;
         RestoreFromConversationState();
         _ = ObserveFault(RestoreAllAsync(), "RestoreAllAsync");
         if (Conversations.Conversations.Count == 0)
@@ -612,8 +612,14 @@
         return task;
     }
 
-    private void OnDiagnostics(string providerId, string raw, bool isError)
+    private void OnDiagnostics(DiagnosticsEvent d)
     {
+        // ThinkTankService is a singleton: every open Chat circuit (each browser tab) hears every
+        // call's diagnostics. Keep only the ones for calls this page made, and file each under the
+        // chat it was made for, not whichever tab happens to be focused when it arrives.
+        if (d.ChatId is null || !ReferenceEquals(d.Origin, this))
+            return;
+        var (providerId, raw, isError) = (d.ProviderId, d.Payload, d.IsError);
         var ts = DateTimeOffset.UtcNow;
         var prefix = isError ? $"{providerId.ToUpperInvariant()} ERROR" : $"{providerId.ToUpperInvariant()} OK";
         var text = $"{prefix}: {raw}";
@@ -626,11 +632,12 @@
         // "Collection was modified".
         _ = InvokeAsync(() =>
         {
-            if (Active is null)
+            var convo = Conversations.Conversations.FirstOrDefault(c => c.ChatId == d.ChatId);
+            if (convo is null)
                 return;
             var e = new PersistedStatusEvent(ts, text);
-            Active.Diagnostics.Add(e);
-            ActiveState.Diagnostics.Add(new StatusEvent(e.Timestamp, e.Text));
+            convo.Diagnostics.Add(e);
+            GetState(convo).Diagnostics.Add(new StatusEvent(e.Timestamp, e.Text));
             Conversations.NotifyChanged();
         });
     }
@@ -907,6 +914,7 @@
         var active = Active;
         var state = ActiveState;
         state.Error = null;
+        using var diagnosticsScope = ThinkTankService.BeginDiagnosticsScope(active.ChatId, this);
 
         if (string.IsNullOrWhiteSpace(active.Topic)) { state.Error = "Please enter a discussion prompt."; return; }
         if (active.Participants.Count < 2) { state.Error = "Pick at least 2 participants."; return; }
@@ -1127,6 +1135,7 @@
 
     private async Task GenerateChatTitleAsync(ChatConversation convo, ConversationUiState state)
     {
+        using var diagnosticsScope = ThinkTankService.BeginDiagnosticsScope(convo.ChatId, this);
         try
         {
             var topic = convo.Topic ?? "";
@@ -1210,7 +1219,7 @@
     public void Dispose()
     {
         Conversations.Changed -= OnConversationsChanged;
-        ThinkTankService.Diagnostics -= OnDiagnostics;
+        ThinkTankService.DiagnosticsRaised -= OnDiagnostics;
     }
 
     private void OnUserChatFocus() => ActiveState.UserChatFocused = true;
@@ -1305,6 +1314,7 @@
         _showRandomDropdown = false;
         // Pin to the tab the topic was requested for; the user can switch tabs during the call.
         var active = Active;
+        using var diagnosticsScope = active is null ? null : ThinkTankService.BeginDiagnosticsScope(active.ChatId, this);
         _generatingTopic = true;
         StateHasChanged();
 
