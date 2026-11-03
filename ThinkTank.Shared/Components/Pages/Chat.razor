@@ -926,21 +926,26 @@
         {
             foreach (var m in state.Messages)
             {
+                // "[Error: ...]" bubbles are UI-only; feeding them back would hand the model
+                // its own failure text as an assistant turn.
+                if (m.IsError)
+                    continue;
+
                 sharedHistory.Add(new SharedTurn
                 {
                     ModelId = m.ParticipantId,
-                    ModelName = m.ParticipantId == "user" ? "User" : (active.Participants.FirstOrDefault(p => p.ParticipantId == m.ParticipantId)?.DisplayName ?? m.ParticipantId),
+                    ModelName = m.ParticipantId == "user" ? "User"
+                              : m.ParticipantId == "vote" ? "Vote Result"
+                              : (active.Participants.FirstOrDefault(p => p.ParticipantId == m.ParticipantId)?.DisplayName ?? m.ParticipantId),
                     Text = m.Text,
                     Round = m.Round
                 });
             }
         }
 
-        if (state.PendingUserTurns.Count > 0)
-        {
-            sharedHistory.AddRange(state.PendingUserTurns);
-            state.PendingUserTurns.Clear();
-        }
+        // Every pending user/vote turn was also added to state.Messages when it was queued, so
+        // the history rebuilt above already carries it; appending it again would duplicate it.
+        state.PendingUserTurns.Clear();
         Conversations.NotifyChanged();
         await ChatStorage.AppendChatJsonAsync(active.ChatId, new { type = "chat-start", chatId = active.ChatId, topic = active.Topic, ts = DateTimeOffset.UtcNow });
 
@@ -1298,6 +1303,8 @@
     private async Task GenerateRandomTopic(string providerId)
     {
         _showRandomDropdown = false;
+        // Pin to the tab the topic was requested for; the user can switch tabs during the call.
+        var active = Active;
         _generatingTopic = true;
         StateHasChanged();
 
@@ -1313,16 +1320,16 @@
                 "Generate a random, interesting discussion topic. Be creative and varied - philosophy, science, ethics, technology, culture, hypotheticals are all fair game.",
                 new List<SharedTurn>());
 
-            if (Active is not null)
+            if (active is not null)
             {
-                Active.Topic = topic.Trim().Trim('"', '\'');
+                active.Topic = topic.Trim().Trim('"', '\'');
                 Conversations.NotifyChanged();
             }
         }
         catch (Exception ex)
         {
-            if (Active is not null)
-                Active.Topic = $"[Error generating topic: {ex.Message}]";
+            if (active is not null)
+                active.Topic = $"[Error generating topic: {ex.Message}]";
         }
         finally
         {
@@ -1604,8 +1611,9 @@
         finally
         {
             _voteRunning = false;
-            if (Active is not null)
-                ActiveState.VotePending = false;
+            // Release the conversation the vote ran on, not whichever tab is focused now —
+            // otherwise a tab switch mid-vote leaves the original run loop paused forever.
+            state.VotePending = false;
             await InvokeAsync(StateHasChanged);
         }
     }

@@ -162,7 +162,9 @@
                 var idx = ThinkTankSettings.Templates.FindIndex(t => t.TemplateId == template.TemplateId);
                 if (idx >= 0)
                 {
-                    ThinkTankSettings.Templates[idx] = template with { PersonalityMarkdown = personality };
+                    // Build on the current entry, not the captured original, so a name/provider/model
+                    // edit made while the personality was generating isn't reverted.
+                    ThinkTankSettings.Templates[idx] = ThinkTankSettings.Templates[idx] with { PersonalityMarkdown = personality };
                     ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates);
                     StateHasChanged();
                 }
@@ -226,8 +228,12 @@
             return;
 
         ThinkTankSettings.Templates[idx] = update(ThinkTankSettings.Templates[idx]);
+        _templatesDirty = true;
         DebouncePersistTemplates();
     }
+
+    /// <summary>True while an edit is waiting on the debounced save (flushed on dispose).</summary>
+    private bool _templatesDirty;
 
     private void DebouncePersistTemplates()
     {
@@ -244,7 +250,11 @@
                 if (token.IsCancellationRequested)
                     return;
 
-                await InvokeAsync(() => ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates));
+                await InvokeAsync(() =>
+                {
+                    _templatesDirty = false;
+                    ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates);
+                });
             }
             catch (OperationCanceledException) { }
         }, token);
@@ -255,31 +265,39 @@
         if (_activeTemplate is null)
             return;
 
+        _templatesDirty = false;
         ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates);
     }
 
     private async Task GeneratePersonality()
     {
         _lastError = null;
-        if (_activeTemplate is null)
+        var template = _activeTemplate;
+        if (template is null)
             return;
 
         _generating = true;
         try
         {
-            var prompt = $"Create a detailed markdown personality profile for a chat participant named {_activeTemplate.DisplayName}. " +
+            var prompt = $"Create a detailed markdown personality profile for a chat participant named {template.DisplayName}. " +
                          "Include: voice/style, beliefs, thoughts, biases, rules, and failure modes to avoid. " +
                          "Keep it under 250 words. Output markdown only.";
 
             var md = await ThinkTank.CallProvider(
-                _activeTemplate.ProviderId,
+                template.ProviderId,
                 personalityMarkdown: "You generate personality profiles for simulated participants.",
-                authOverrideJson: _activeTemplate.AuthOverrideJson,
+                authOverrideJson: template.AuthOverrideJson,
                 topic: prompt,
                 history: new List<SharedTurn>());
 
-            UpdateActiveTemplate(t => t with { PersonalityMarkdown = md });
-            SaveActiveTemplate();
+            // Write to the persona the profile was generated for, not whichever one is selected
+            // now — the list stays clickable while the call is in flight.
+            var idx = ThinkTankSettings.Templates.FindIndex(t => t.TemplateId == template.TemplateId);
+            if (idx >= 0)
+            {
+                ThinkTankSettings.Templates[idx] = ThinkTankSettings.Templates[idx] with { PersonalityMarkdown = md };
+                ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates);
+            }
         }
         catch (Exception ex)
         {
@@ -326,10 +344,16 @@
     {
         _lastError = null;
 
-        if (_activeTemplate is null)
+        // Capture the persona under test; the selection can change (or the persona be removed)
+        // while the call is in flight.
+        var template = _activeTemplate;
+        if (template is null)
             return;
 
-        var effectiveKey = ThinkTankSettings.GetKeyForProvider(_activeTemplate.ProviderId, null);
+        // In Claude fallback mode CallProvider routes every non-Claude persona through Claude, so the
+        // key that matters is Claude's.
+        var keyProvider = ThinkTankSettings.ClaudeFallbackMode ? "claude" : template.ProviderId;
+        var effectiveKey = ThinkTankSettings.GetKeyForProvider(keyProvider, null);
         if (string.IsNullOrWhiteSpace(effectiveKey))
         {
             _lastError = "API key is required. Add one for this provider in MindAttic Vault (Settings cog).";
@@ -340,31 +364,31 @@
         var prompt = "Connectivity test: reply with a single short sentence confirming you can respond.";
 
         _testing = true;
-        Chat.Add(_activeTemplate.DisplayName, $"[TEST {chatId}] Sending: {prompt}");
+        Chat.Add(template.DisplayName, $"[TEST {chatId}] Sending: {prompt}");
 
         try
         {
-            var response = await ThinkTank.CallProvider(_activeTemplate.ProviderId, _activeTemplate.PersonalityMarkdown, _activeTemplate.AuthOverrideJson, prompt, history: new List<SharedTurn>());
-            Chat.Add(_activeTemplate.DisplayName, $"[TEST {chatId}] Response: {response}");
+            var response = await ThinkTank.CallProvider(template.ProviderId, template.PersonalityMarkdown, template.AuthOverrideJson, prompt, history: new List<SharedTurn>());
+            Chat.Add(template.DisplayName, $"[TEST {chatId}] Response: {response}");
 
             await ChatStorage.AppendChatJsonAsync(chatId, new
             {
                 id = chatId,
                 type = "settings-test",
-                participantTemplateId = _activeTemplate.TemplateId,
-                providerId = _activeTemplate.ProviderId,
-                displayName = _activeTemplate.DisplayName,
+                participantTemplateId = template.TemplateId,
+                providerId = template.ProviderId,
+                displayName = template.DisplayName,
                 prompt,
                 response,
                 ts = DateTimeOffset.UtcNow
             });
 
-            await ChatStorage.WritePerspectiveAsync(chatId, _activeTemplate.ProviderId,
-                $"# Provider test\n\n- ChatId: `{chatId}`\n- TemplateId: `{_activeTemplate.TemplateId}`\n- Provider: `{_activeTemplate.ProviderId}`\n- DisplayName: `{_activeTemplate.DisplayName}`\n- When: `{DateTimeOffset.UtcNow:o}`\n\n## Notes\n\nThis is a connectivity test run from Settings.\n");
+            await ChatStorage.WritePerspectiveAsync(chatId, template.ProviderId,
+                $"# Provider test\n\n- ChatId: `{chatId}`\n- TemplateId: `{template.TemplateId}`\n- Provider: `{template.ProviderId}`\n- DisplayName: `{template.DisplayName}`\n- When: `{DateTimeOffset.UtcNow:o}`\n\n## Notes\n\nThis is a connectivity test run from Settings.\n");
         }
         catch (Exception ex)
         {
-            Chat.Add(_activeTemplate.DisplayName, $"[TEST {chatId}] Error: {ex.Message}", isError: true);
+            Chat.Add(template.DisplayName, $"[TEST {chatId}] Error: {ex.Message}", isError: true);
             _lastError = ex.Message;
         }
         finally
@@ -421,5 +445,13 @@
         Chat.Changed -= OnChatChanged;
         _templatePersistDebounceCts?.Cancel();
         _templatePersistDebounceCts?.Dispose();
+
+        // Cancelling the debounce drops an edit made in the last 650 ms (e.g. type, then navigate
+        // away); the in-memory template already has it, so flush it to Settings.json now.
+        if (_templatesDirty)
+        {
+            _templatesDirty = false;
+            ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates);
+        }
     }
 }
