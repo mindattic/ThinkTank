@@ -137,3 +137,9 @@ updated: 2026-10-03
 | TT-T27 | 2026-10-31 | feature | closed | LAMP: move ThinkTank's app-level settings and keys to MindAttic.Vault.Desktop (manifest, LoadOrSeed, shared named keys, cog opens Vault) | 784cde1 ThinkTankSettingTests+ThinkTankLampTests (39/39; full suite 300/300) |
 | TT-T28 | 2026-10-31 | fix | closed | ThinkTank tests write the real %LOCALAPPDATA%\MindAttic\ThinkTank\Conversations: ChatStorage.GetChatFolder ignores MINDATTIC_VAULT_LOCAL_ROOT, so ChatStorageTests/ChatLogServiceTests create and delete chat folders in the user's real data; resolve it through VaultPaths.LocalApp (found by M.VALT-T67) | 0a5ea28 |
 | TT-T29 | 2026-10-31 | docs | closed | Update USER_STORIES.md | — |
+| TT-T30 | 2026-11-02 | docs | open | Adopt MindAttic.Agency docs-site pipeline, publish README to GitHub Pages (HOUSE-LAW-14) | — |
+| TT-T31 | 2026-11-02 | fix | closed | Bughunt sweep, two passes: find and fix real bugs across tracked source (user request 2026-11-02) | — |
+| TT-T32 | 2026-11-02 | fix | closed | Command pointer in .agent/commands said a literal $source instead of its legacy path (install.ps1 escaping bug fixed in MAT-T84); point it at the real source, or the global command when the project copy is gone | — |
+| TT-T33 | 2026-11-02 | fix | closed | Fix the open item the 2026-11-02 bughunt left for decision (Diagnostics events carry a chat id; pages filter by it) | — |
+| TT-T34 | 2026-11-10 | chore | closed | Crash recovery: commit the command-catalog sync (.agent/commands/*.md) and regenerated docs/USER_STORIES.md left uncommitted by the session crash | — |
+| TT-T35 | 2026-11-10 | chore | open | Crash recovery: commit the command-catalog sync (.agent/commands/*.md) and regenerated docs/USER_STORIES.md left uncommitted by the session crash | — |
