@@ -146,4 +146,5 @@ updated: 2026-10-03
 | TT-T36 | 2026-11-10 | chore | closed | Crash recovery / fleet sync: commit the regenerated docs/USER_STORIES.md left uncommitted after other tickets closed elsewhere | — |
 | TT-T37 | 2026-11-10 | chore | closed | Adopt the shared docs-site pipeline: turn on GitHub Pages | — |
 | TT-T38 | 2026-11-17 | docs | closed | Update USER_STORIES.md | — |
-| TT-T39 | 2026-11-17 | fix | open | ThinkTank.Core won't build: MindAttic.Legion pinned at 25.0.0, which isn't in the NuGet cache; bump to 27.0.0 | — |
+| TT-T39 | 2026-11-17 | fix | closed | ThinkTank.Core won't build: MindAttic.Legion pinned at 25.0.0, which isn't in the NuGet cache; bump to 27.0.0 | — |
+| TT-T40 | 2026-11-17 | docs | closed | Update USER_STORIES.md | — |
