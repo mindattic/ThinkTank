@@ -1,15 +1,16 @@
 #!/bin/bash
-# Pre-commit hook: runs all unit tests before allowing a commit.
-# If any test fails, the commit is blocked.
+# Pre-commit hook: builds the solution before allowing a commit.
+# Workspace rule: verification is build-only; tests run only when the owner asks (/test).
+# If the build fails, the commit is blocked.
 
-echo "Running unit tests..."
-dotnet test ThinkTank.UnitTests --verbosity minimal --no-restore 2>&1
+echo "Building ThinkTank.slnx..."
+dotnet build ThinkTank.slnx --verbosity quiet --nologo 2>&1
 
 if [ $? -ne 0 ]; then
     echo ""
-    echo "COMMIT BLOCKED: Unit tests failed. Fix failing tests before committing."
+    echo "COMMIT BLOCKED: the solution does not build. Fix the build before committing."
     exit 1
 fi
 
-echo "All tests passed."
+echo "Build succeeded."
 exit 0
