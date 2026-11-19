@@ -1,4 +1,5 @@
 ﻿@inject NavigationManager Nav
+@inject ThinkTankHostMode HostMode
 @implements IDisposable
 
 <nav class="top-nav" aria-label="Primary">
@@ -9,11 +10,15 @@
         <NavLink class="settings-tab nav-tab" href="personas" aria-current="@AriaCurrent("personas")">Personas</NavLink>
         @* LAMP (TT-T27): settings are edited only in MindAttic Vault. The cog opens Vault at ThinkTank's tab from
            the server (which runs on the user's machine); the link is the mindattic-vault:// fallback for a
-           browser on another machine. *@
-        <button type="button" class="settings-tab nav-tab" @onclick="OpenSettings" title="Open ThinkTank's settings in MindAttic Vault">&#9881; Settings</button>
-        <a class="settings-tab nav-tab vault-link" href="@SettingsCog.Link()" title="Open ThinkTank's settings in MindAttic Vault (link)" aria-label="Open ThinkTank's settings in MindAttic Vault (link)">&#8599;</a>
+           browser on another machine. Hosted (TT-T42) neither is shown: a browser click must never start a
+           process on the server, and the link only works where Vault is installed. *@
+        @if (!HostMode.IsHosted)
+        {
+            <button type="button" class="settings-tab nav-tab" @onclick="OpenSettings" title="Open ThinkTank's settings in MindAttic Vault">&#9881; Settings</button>
+            <a class="settings-tab nav-tab vault-link" href="@SettingsCog.Link()" title="Open ThinkTank's settings in MindAttic Vault (link)" aria-label="Open ThinkTank's settings in MindAttic Vault (link)">&#8599;</a>
+        }
     </div>
-    @if (!string.IsNullOrEmpty(settingsMessage))
+    @if (!HostMode.IsHosted && !string.IsNullOrEmpty(settingsMessage))
     {
         <div class="nav-status" role="status">@settingsMessage <a href="@SettingsCog.Link()">Open Vault</a></div>
     }
@@ -40,6 +45,7 @@
     /// <summary>The Settings cog: opens MindAttic Vault at ThinkTank's tab (no settings editor in ThinkTank).</summary>
     private void OpenSettings()
     {
+        if (HostMode.IsHosted) return;   // never start a process on a hosted server (TT-T42)
         var result = SettingsCog.Open();
         settingsMessage = result.Opened ? null : result.Message;
     }

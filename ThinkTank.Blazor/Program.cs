@@ -38,6 +38,8 @@ builder.Services.AddLegionClient();
 var thinkTankSettings = ThinkTankSettingsSource.Open(builder.Configuration);
 MindAttic.Vault.Credentials.KeyImporter.ImportAppScopedFor(ThinkTankSettings.AppId);
 builder.Services.AddSingleton(thinkTankSettings);
+// TT-T42: hosted (Hosting:Mode=Public, or on App Service) hides the Settings cog that starts Vault.Desktop on the server.
+builder.Services.AddSingleton(ThinkTankHostMode.From(builder.Configuration));
 builder.Services.AddSingleton(_ => new SettingsService(
     thinkTankSettings, builder.Configuration.CreateKeySelector(ThinkTankKeys.ClassifyLegionFailure)));
 builder.Services.AddSingleton<ThinkTankSettingsService>(sp => sp.GetRequiredService<SettingsService>());
