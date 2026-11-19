@@ -855,8 +855,9 @@
         // Signal any in-flight run loop for this conversation to stop before we drop its
         // state — otherwise the loop keeps firing LLM calls and writing turns to a
         // conversation the user already closed.
+        // TT-T43: RequestStop also cancels the provider call in flight, so no reply is paid for after Close.
         if (_states.TryGetValue(chatId, out var st))
-            st.StopRequested = true;
+            st.RequestStop();
 
         Conversations.CloseConversation(chatId);
         _states.Remove(chatId);
@@ -921,6 +922,12 @@
 
         state.Running = true;
         state.StopRequested = false;
+
+        // TT-T43: one token per run, linked to this page's lifetime. Pause, Close and the circuit ending
+        // (Dispose) cancel it, which aborts the provider call or vote in flight instead of waiting for it.
+        using var runCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        state.RunCts = runCts;
+        var ct = runCts.Token;
 
         // Build shared history from existing messages (supports resume)
         var sharedHistory = new List<SharedTurn>();
@@ -991,7 +998,7 @@
         while (!state.StopRequested)
         {
             while ((state.UserChatFocused || state.VotePending) && !state.StopRequested)
-                await Task.Delay(50);
+                await DelayUnlessStopped(50, ct);
 
             round++;
             if (round > maxRounds)
@@ -1012,11 +1019,13 @@
                     continue;
 
                 while ((state.UserChatFocused || state.VotePending) && !state.StopRequested)
-                    await Task.Delay(50);
+                    await DelayUnlessStopped(50, ct);
+                if (state.StopRequested)
+                    break;
 
                 state.CurrentSpeaker = p.ParticipantId;
                 StateHasChanged();
-                await Task.Delay(50);
+                await DelayUnlessStopped(50, ct);
 
                 try
                 {
@@ -1026,7 +1035,7 @@
                         state.PendingUserTurns.Clear();
                     }
 
-                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength, personaId: p.EffectivePersonaId);
+                    var response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength, personaId: p.EffectivePersonaId, ct: ct);
 
                     // If the user injected a message while the API call was in-flight,
                     // discard the stale response and re-call so the participant can pivot.
@@ -1037,10 +1046,10 @@
 
                         // Wait for user to finish typing if still focused
                         while (state.UserChatFocused && !state.StopRequested)
-                            await Task.Delay(50);
+                            await DelayUnlessStopped(50, ct);
 
                         if (!state.StopRequested)
-                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength, personaId: p.EffectivePersonaId);
+                            response = await ThinkTankService.CallProvider(p.ProviderId, p.PersonalityMarkdown + VoteRequestInstruction, p.AuthOverrideJson, active.Topic!, sharedHistory, active.MaxTokens ?? Settings.GlobalMaxTokens, speakerId: p.ParticipantId, responseLength: active.ResponseLength ?? Settings.GlobalResponseLength, personaId: p.EffectivePersonaId, ct: ct);
                     }
 
                     // Strip any participant-initiated vote request from the visible response
@@ -1093,7 +1102,13 @@
                     Conversations.NotifyChanged();
 
                     if (autoVoteQuestion is not null && !state.StopRequested)
-                        await RunParticipantVoteAsync(state, active, sharedHistory, autoVoteQuestion, round);
+                        await RunParticipantVoteAsync(state, active, sharedHistory, autoVoteQuestion, round, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    // Paused, closed or the circuit ended mid-call: the reply was never received, so there is
+                    // nothing to show. Leave the turn unspoken; a resume asks this participant again.
+                    break;
                 }
                 catch (Exception ex)
                 {
@@ -1112,7 +1127,7 @@
                 state.CompletedTurns++;
                 state.CurrentSpeaker = null;
                 StateHasChanged();
-                await Task.Delay(400);
+                await DelayUnlessStopped(400, ct);
             }
 
             // Only the first round after resume can have skip entries — clear so
@@ -1128,9 +1143,21 @@
             }
         }
 
+        state.RunCts = null;
         state.Running = false;
         state.CurrentSpeaker = null;
-        StateHasChanged();
+        if (!_lifetime.IsCancellationRequested)
+            StateHasChanged();
+    }
+
+    /// <summary>
+    /// The run loop's waits (TT-T43): returns early, without throwing, when the run is stopped, so a paused or
+    /// closed loop leaves through its own <c>StopRequested</c> checks.
+    /// </summary>
+    private static async Task DelayUnlessStopped(int milliseconds, CancellationToken ct)
+    {
+        try { await Task.Delay(milliseconds, ct); }
+        catch (OperationCanceledException) { }
     }
 
     private async Task GenerateChatTitleAsync(ChatConversation convo, ConversationUiState state)
@@ -1147,6 +1174,8 @@
             // Ask each participant to suggest a short title
             foreach (var p in participants)
             {
+                if (_lifetime.IsCancellationRequested)
+                    return;
                 try
                 {
                     var suggestion = await ThinkTankService.CallProvider(
@@ -1154,7 +1183,8 @@
                         "You suggest concise chat titles. Output ONLY the title, no quotes, no punctuation, no explanation. Max 5 words.",
                         p.AuthOverrideJson,
                         $"Suggest a short, catchy title for a group discussion about: {topic}",
-                        new List<SharedTurn>());
+                        new List<SharedTurn>(),
+                        ct: _lifetime.Token);
 
                     var cleaned = suggestion.Trim().Trim('"', '\'', '.').Trim();
                     if (!string.IsNullOrWhiteSpace(cleaned) && cleaned.Length <= 50)
@@ -1183,7 +1213,8 @@
                         "You pick the best chat title from a list. Output ONLY the chosen title text, nothing else.",
                         picker.AuthOverrideJson,
                         $"Pick the best title for a discussion about \"{topic}\" from these suggestions:\n{numbered}",
-                        new List<SharedTurn>());
+                        new List<SharedTurn>(),
+                        ct: _lifetime.Token);
 
                     bestTitle = choice.Trim().Trim('"', '\'', '.').Trim();
                     if (string.IsNullOrWhiteSpace(bestTitle) || bestTitle.Length > 50)
@@ -1209,15 +1240,27 @@
 
         if (ActiveState.Running)
         {
-            ActiveState.StopRequested = true;
+            // Pause (TT-T43): cancels the provider call in flight at once, not after it returns.
+            ActiveState.RequestStop();
             return;
         }
 
         await StartActive();
     }
 
+    /// <summary>
+    /// Cancelled when this page goes away, which includes the browser circuit ending (tab closed, connection
+    /// lost for good). Every run, vote and auxiliary LLM call started from the page is linked to it (TT-T43).
+    /// </summary>
+    private readonly CancellationTokenSource _lifetime = new();
+
     public void Dispose()
     {
+        // Stop every run this page started before anything else: the loops see StopRequested and their
+        // in-flight provider calls are cancelled, so a closed browser stops spending within one turn.
+        foreach (var st in _states.Values)
+            st.StopRequested = true;
+        _lifetime.Cancel();
         Conversations.Changed -= OnConversationsChanged;
         ThinkTankService.DiagnosticsRaised -= OnDiagnostics;
     }
@@ -1328,13 +1371,18 @@
                 "You generate interesting, thought-provoking discussion topics for a group of AI systems to debate. Output ONLY the topic as a single sentence or question. No quotes, no explanation.",
                 authJson,
                 "Generate a random, interesting discussion topic. Be creative and varied - philosophy, science, ethics, technology, culture, hypotheticals are all fair game.",
-                new List<SharedTurn>());
+                new List<SharedTurn>(),
+                ct: _lifetime.Token);
 
             if (active is not null)
             {
                 active.Topic = topic.Trim().Trim('"', '\'');
                 Conversations.NotifyChanged();
             }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return;   // the page is gone; nothing to show
         }
         catch (Exception ex)
         {
@@ -1428,6 +1476,18 @@
         public string Topic { get; set; } = "";
         public bool Running { get; set; }
         public bool StopRequested { get; set; }
+
+        /// <summary>The running loop's cancellation (TT-T43); null when no run is in progress.</summary>
+        public CancellationTokenSource? RunCts { get; set; }
+
+        /// <summary>Stops the run loop and cancels whatever provider call or vote it is waiting on.</summary>
+        public void RequestStop()
+        {
+            StopRequested = true;
+            try { RunCts?.Cancel(); }
+            catch (ObjectDisposedException) { /* the run already ended */ }
+        }
+
         public bool VotePending { get; set; }
         /// <summary>True while the user has this conversation's chat input focused. Per-conversation
         /// so typing in one tab pauses only that loop, not every running conversation.</summary>
@@ -1476,7 +1536,8 @@
         ChatConversation active,
         List<SharedTurn> sharedHistory,
         string question,
-        int round)
+        int round,
+        CancellationToken ct)
     {
         var ts = DateTimeOffset.UtcNow;
         state.StatusEvents.Add(new StatusEvent(ts, $"Participant called a vote: \"{question}\""));
@@ -1486,7 +1547,7 @@
         {
             var result = await VotingService.VoteAsync(
                 active.Participants, question, active.Topic ?? "",
-                new List<string> { "Yes", "No" }, Quorum.SimpleMajority);
+                new List<string> { "Yes", "No" }, Quorum.SimpleMajority, ct);
 
             var voteText = $"[VOTE] Question: {question}\nDecision: {result.Consensus} ({result.ConsensusStrength:P0} agreement)\nSummary: {result.NarrativeSummary}";
             var voteTurn = new SharedTurn { ModelId = "vote", ModelName = "Vote Result", Text = voteText, Round = round };
@@ -1515,6 +1576,10 @@
             }
 
             Conversations.NotifyChanged();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return;   // paused or closed mid-vote: no result to record
         }
         catch (Exception ex)
         {
@@ -1590,7 +1655,7 @@
             var quorum = _voteType == VoteDialogType.FreeForm ? Quorum.Plurality : Quorum.SimpleMajority;
             var context = active.Topic ?? "";
 
-            var result = await VotingService.VoteAsync(active.Participants, _voteQuestion, context, options, quorum);
+            var result = await VotingService.VoteAsync(active.Participants, _voteQuestion, context, options, quorum, _lifetime.Token);
 
             var voteText = $"[VOTE] Question: {_voteQuestion}\nDecision: {result.Consensus} ({result.ConsensusStrength:P0} agreement)\nSummary: {result.NarrativeSummary}";
             var round = state.Messages.Count > 0 ? state.Messages.Max(m => m.Round) : 1;
@@ -1612,6 +1677,10 @@
             });
 
             Conversations.NotifyChanged();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return;   // the page is gone (circuit ended) mid-vote
         }
         catch (Exception ex)
         {

@@ -129,14 +129,14 @@ public class ThinkTankService
     // ── Main dispatch ────────────────────────────────────────────────────────
 
     /// <summary>Sends a chat completion request to the specified model using its default personality and auth.</summary>
-    public Task<string> CallModel(LlmModel model, string topic, List<SharedTurn> history)
-        => CallProvider(model.Id, model.Personality, authOverrideJson: null, topic, history);
+    public Task<string> CallModel(LlmModel model, string topic, List<SharedTurn> history, CancellationToken ct = default)
+        => CallProvider(model.Id, model.Personality, authOverrideJson: null, topic, history, ct: ct);
 
     /// <summary>
     /// Dispatches a chat completion request to any supported provider by ID, via
     /// MindAttic.Legion. Honours <see cref="ThinkTankSettingsService.ClaudeFallbackMode"/>
     /// (everyone routes through Claude with a roleplay wrapper) and per-template
-    /// auth overrides.
+    /// auth overrides. <paramref name="ct"/> aborts the request in flight (Pause, Close, the circuit ending; TT-T43).
     /// </summary>
     public async Task<string> CallProvider(
         string providerId,
@@ -147,8 +147,10 @@ public class ThinkTankService
         int? maxTokensOverride = null,
         string? speakerId = null,
         string? responseLength = null,
-        string? personaId = null)
+        string? personaId = null,
+        CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         // Append the persona's psychometric brief (OCEAN/HEXACO/MBTI/Enneagram/DISC) when one
         // has been scored for this persona, so the model embodies the measured traits. No-op
         // when personaId is null (auxiliary callers) or the persona is unscored.
@@ -198,7 +200,7 @@ public class ThinkTankService
 
         try
         {
-            Task<string> Call(string key, CancellationToken ct) => legion.CallChatAsync(
+            Task<string> Call(string key, CancellationToken callCt) => legion.CallChatAsync(
                 providerId: actualProviderId,
                 apiKey: key,
                 model: model,
@@ -206,15 +208,19 @@ public class ThinkTankService
                 systemPrompt: systemPrompt,
                 maxTokens: maxTokens,
                 temperature: 0.7,
-                ct: ct);
+                ct: callCt);
 
             var raw = overrideKey is not null
-                ? await Call(overrideKey, default)
-                : await settings.ExecuteWithKeyAsync(actualProviderId, Call);
+                ? await Call(overrideKey, ct)
+                : await settings.ExecuteWithKeyAsync(actualProviderId, Call, ct);
 
             var clean = SanitizeModelOutput(providerId, raw);
             EmitDiagnostics(providerId, model, clean, isError: false);
             return clean;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;   // stopped by the caller, not a provider failure
         }
         catch (Exception ex)
         {
