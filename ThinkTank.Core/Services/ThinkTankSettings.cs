@@ -109,6 +109,45 @@ public sealed class ThinkTankSettings
     [SettingRange(20, 10_000)]
     public int MaxVoteTextLength { get; set; } = 500;
 
+    // ---- Spend limits (TT-T47) ----------------------------------------------------------
+    // Enforced on the server, in ThinkTankService / VotingService / LlmSpendGuard: raising a number in the browser
+    // has no effect past these caps. Every LLM call is recorded in the LlmUsage table (database ThinkTank, schema app).
+
+    [Setting("Most participants per conversation", Group = "Spend limits", Order = 1,
+        Help = "A run or vote with more seats than this is refused.")]
+    [SettingRange(2, 50)]
+    public int MaxParticipants { get; set; } = 6;
+
+    [Setting("Most rounds per run", Group = "Spend limits", Order = 2,
+        Help = "Caps the rounds a run can take, whatever the conversation asks for.")]
+    [SettingRange(1, 999)]
+    public int MaxRoundsPerRun { get; set; } = 20;
+
+    [Setting("Most tokens per reply", Group = "Spend limits", Order = 3,
+        Help = "Caps each reply's output tokens, whatever the conversation, persona or provider setting asks for.")]
+    [SettingRange(64, 32768)]
+    public int MaxTokensPerReply { get; set; } = 4096;
+
+    [Setting("Runs at once per account", Group = "Spend limits", Order = 4,
+        Help = "How many conversations one account can have running at the same time.")]
+    [SettingRange(1, 20)]
+    public int MaxConcurrentRuns { get; set; } = 2;
+
+    [Setting("LLM calls per account per day", Group = "Spend limits", Order = 5,
+        Help = "Daily budget of LLM calls (turns, votes, titles, topics, personas) per account. Resets at midnight UTC.")]
+    [SettingRange(1, 100_000)]
+    public int DailyCallBudget { get; set; } = 300;
+
+    [Setting("Actions per window", Group = "Spend limits", Order = 6,
+        Help = "How many Start, Vote and Generate actions one account can take within the window below.")]
+    [SettingRange(1, 10_000)]
+    public int ActionPermitLimit { get; set; } = 10;
+
+    [Setting("Action window (seconds)", Group = "Spend limits", Order = 7,
+        Help = "Length of the Start / Vote / Generate rate-limit window.")]
+    [SettingRange(1, 86_400)]
+    public int ActionWindowSeconds { get; set; } = 60;
+
     // ---- Hosting (TT-T45) ---------------------------------------------------------------
     // Only used when ThinkTank is served to other machines (Hosting:Mode=Public); read once at startup.
 

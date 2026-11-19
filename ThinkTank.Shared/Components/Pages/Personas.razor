@@ -7,6 +7,7 @@
 @inject HumanNameService HumanNames
 @inject NameGeneratorService NameGen
 @inject ILogger<Personas> Log
+@inject LlmSpendGuard Guard
 @implements IDisposable
 
 @* LAMP (TT-T27): ThinkTank's app-level settings (defaults, appearance, provider models, keys) are edited only
@@ -115,6 +116,12 @@
     private List<(string Id, string Name)> ProviderOptions
         => ThinkTank.Models.Select(m => (m.Id, m.Name)).ToList();
 
+    // TT-T47: the signed-in account every LLM call from this page is charged to (LlmCaller scope).
+    [CascadingParameter] private Task<Microsoft.AspNetCore.Components.Authorization.AuthenticationState>? AuthState { get; set; }
+
+    private async Task<string?> UserNameAsync() =>
+        AuthState is null ? null : (await AuthState).User.Identity?.Name;
+
     protected override void OnInitialized()
     {
         Chat.Changed += OnChatChanged;
@@ -154,7 +161,8 @@
         _lastError = null;
         StateHasChanged();
 
-        // Try to generate a richer personality in the background
+        // Try to generate a richer personality in the background (TT-T47: charged to this account).
+        using var caller = LlmCaller.Begin(await UserNameAsync(), null, "persona");
         try
         {
             var personality = await GenerateStarterPersonality(providerId, firstName, llmName);
@@ -181,6 +189,7 @@
 
         try
         {
+            Guard.CheckAction(LlmCaller.Current?.UserName, "Generate");
             return await ThinkTank.CallProvider(providerId, "You create short markdown personality profiles.", authOverrideJson: null, topic: prompt, history: new List<SharedTurn>());
         }
         catch
@@ -278,8 +287,10 @@
             return;
 
         _generating = true;
+        using var caller = LlmCaller.Begin(await UserNameAsync(), null, "persona");
         try
         {
+            Guard.CheckAction(LlmCaller.Current?.UserName, "Generate");
             var prompt = $"Create a detailed markdown personality profile for a chat participant named {template.DisplayName}. " +
                          "Include: voice/style, beliefs, thoughts, biases, rules, and failure modes to avoid. " +
                          "Keep it under 250 words. Output markdown only.";
@@ -368,9 +379,11 @@
 
         _testing = true;
         Chat.Add(template.DisplayName, $"[TEST {chatId}] Sending: {prompt}");
+        using var caller = LlmCaller.Begin(await UserNameAsync(), null, "test");
 
         try
         {
+            Guard.CheckAction(LlmCaller.Current?.UserName, "Generate");
             var response = await ThinkTank.CallProvider(template.ProviderId, template.PersonalityMarkdown, template.AuthOverrideJson, prompt, history: new List<SharedTurn>());
             Chat.Add(template.DisplayName, $"[TEST {chatId}] Response: {response}");
 

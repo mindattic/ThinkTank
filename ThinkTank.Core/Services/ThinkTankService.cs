@@ -27,14 +27,20 @@ public class ThinkTankService
     private readonly ThinkTankSettingsService settings;
     private readonly PsychometricProfileService psychometrics;
     private readonly ILogger logger;
+    private readonly LlmSpendGuard? guard;
 
+    /// <param name="guard">
+    /// TT-T47: when present (always, in the app), every call is charged to the signed-in account, refused past its
+    /// daily budget and recorded in LlmUsage. Tests that only check the request leave it out.
+    /// </param>
     public ThinkTankService(LegionClient legion, ThinkTankSettingsService settings, PsychometricProfileService psychometrics,
-        ILogger<ThinkTankService>? logger = null)
+        ILogger<ThinkTankService>? logger = null, LlmSpendGuard? guard = null)
     {
         this.legion = legion;
         this.settings = settings;
         this.psychometrics = psychometrics;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
+        this.guard = guard;
     }
 
     /// <summary>
@@ -186,7 +192,8 @@ public class ThinkTankService
 
         var defaultModel = providerInfo.DefaultModel ?? "";
         var model        = GetModel(actualProviderId, actualAuthOverride, defaultModel);
-        var maxTokens    = GetMaxTokens(actualProviderId, actualAuthOverride, maxTokensOverride);
+        // TT-T47: never above the Vault cap, whatever the conversation, persona or provider setting asks for.
+        var maxTokens    = Math.Clamp(GetMaxTokens(actualProviderId, actualAuthOverride, maxTokensOverride), 1, settings.Spend.MaxTokensPerReply);
 
         var maxContextTurns = ResolveMaxContextTurns();
         if (history.Count > maxContextTurns)
@@ -202,6 +209,10 @@ public class ThinkTankService
         // (name/topic/personality generation) leave it null and are not constrained.
         if (!string.IsNullOrWhiteSpace(responseLength))
             systemPrompt += ResponseLengthPreset.InstructionFor(responseLength);
+
+        // TT-T47: charged to the signed-in account and recorded before it is made (refused past the daily budget).
+        var promptChars = systemPrompt.Length + topic.Length + history.Sum(t => t.Text?.Length ?? 0);
+        var usage = guard is null ? null : await guard.BeginCallAsync(actualProviderId, model, promptChars, ct);
 
         try
         {
@@ -221,10 +232,12 @@ public class ThinkTankService
 
             var clean = SanitizeModelOutput(providerId, raw);
             EmitDiagnostics(providerId, model, clean, isError: false);
+            if (usage is not null) await guard!.CompleteAsync(usage, clean, error: null, cancelled: false);
             return clean;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            if (usage is not null) await guard!.CompleteAsync(usage, null, error: null, cancelled: true);
             throw;   // stopped by the caller, not a provider failure
         }
         catch (Exception ex)
@@ -233,7 +246,9 @@ public class ThinkTankService
             // user sees) gets the plain sentence and a reference that matches the log entry.
             var reference = ProviderErrorText.NewReference();
             logger.LogWarning(ex, "LLM call failed (ref {Reference}): provider {Provider}, model {Model}", reference, actualProviderId, model);
-            EmitDiagnostics(providerId, model, "", isError: true, errorMessage: ProviderErrorText.Describe(ex, null, reference));
+            var friendly = ProviderErrorText.Describe(ex, null, reference);
+            EmitDiagnostics(providerId, model, "", isError: true, errorMessage: friendly);
+            if (usage is not null) await guard!.CompleteAsync(usage, null, friendly, cancelled: false);
             throw;
         }
     }

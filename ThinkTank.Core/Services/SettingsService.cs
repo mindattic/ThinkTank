@@ -80,6 +80,12 @@ public class ThinkTankSettingsService
     /// <summary>Global default response-length preset (<see cref="ResponseLengthPreset"/>).</summary>
     public string? GlobalResponseLength => ResponseLengthPreset.Normalize(S.GlobalResponseLength);
 
+    /// <summary>The server-side spend caps (TT-T47); read live from ThinkTank's Vault settings.</summary>
+    public SpendLimits Spend => new(
+        Math.Max(2, S.MaxParticipants), Math.Max(1, S.MaxRoundsPerRun), Math.Max(1, S.MaxTokensPerReply),
+        Math.Max(1, S.MaxConcurrentRuns), Math.Max(1, S.DailyCallBudget),
+        Math.Max(1, S.ActionPermitLimit), Math.Max(1, S.ActionWindowSeconds));
+
     /// <summary>Longest text accepted per input field (TT-T44); read live from ThinkTank's Vault settings.</summary>
     public InputLimits Limits => new(
         Math.Max(1, S.MaxTopicLength), Math.Max(1, S.MaxMessageLength), Math.Max(1, S.MaxPersonaLength),

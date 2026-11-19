@@ -7,6 +7,7 @@
 @inject ChatConversationsService Conversations
 @inject IJSRuntime JS
 @inject ILogger<Chat> Log
+@inject LlmSpendGuard Guard
 @implements IDisposable
 
 <PageTitle>Think Tank</PageTitle>
@@ -316,12 +317,12 @@
                             <h2 id="options-pane-heading" class="member-list-header">Options</h2>
                             <div class="options-pane-body">
                                 <label class="options-label" for="conv-max-tokens">Max Tokens</label>
-                                <input id="conv-max-tokens" type="number" class="options-input" min="64" max="32768" step="64"
+                                <input id="conv-max-tokens" type="number" class="options-input" min="64" max="@Settings.Spend.MaxTokensPerReply" step="64"
                                        value="@(Active.MaxTokens ?? Settings.GlobalMaxTokens ?? 2048)"
                                        aria-describedby="conv-options-hint"
                                        @onchange="OnMaxTokensChanged" />
                                 <label class="options-label" for="conv-max-rounds" style="margin-top:0.5rem">Max Rounds</label>
-                                <input id="conv-max-rounds" type="number" class="options-input" min="1" max="999" step="1"
+                                <input id="conv-max-rounds" type="number" class="options-input" min="1" max="@Settings.Spend.MaxRoundsPerRun" step="1"
                                        value="@(Active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10)"
                                        aria-describedby="conv-options-hint"
                                        @onchange="OnMaxRoundsChanged" />
@@ -904,6 +905,12 @@
     private string GetProviderAvatar(string providerId)
         => ThinkTankService.Models.FirstOrDefault(m => m.Id == providerId)?.Avatar ?? "?";
 
+    // TT-T47: the signed-in account every LLM call from this page is charged to (LlmCaller scope).
+    [CascadingParameter] private Task<Microsoft.AspNetCore.Components.Authorization.AuthenticationState>? AuthState { get; set; }
+
+    private async Task<string?> UserNameAsync() =>
+        AuthState is null ? null : (await AuthState).User.Identity?.Name;
+
     private async Task StartActive()
     {
         if (Active is null)
@@ -920,6 +927,23 @@
 
         if (string.IsNullOrWhiteSpace(active.Topic)) { state.Error = "Please enter a discussion prompt."; return; }
         if (active.Participants.Count < 2) { state.Error = "Pick at least 2 participants."; return; }
+
+        // TT-T47: server-side limits. The Start rate limit, the participant cap and runs-at-once are checked
+        // here, the rounds come from the lease (capped), and every call below is charged to this account.
+        var user = await UserNameAsync();
+        LlmSpendGuard.RunLease lease;
+        try
+        {
+            Guard.CheckAction(user, "Start");
+            lease = Guard.BeginRun(user, active.Participants.Count, active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10);
+        }
+        catch (UserFacingException ex)
+        {
+            state.Error = ex.Message;
+            return;
+        }
+        using var runLease = lease;
+        using var caller = LlmCaller.Begin(user, active.ChatId, "turn");
 
         state.Running = true;
         state.StopRequested = false;
@@ -995,7 +1019,7 @@
             }
         }
         var titleGenerated = isResume;
-        var maxRounds = active.MaxRounds ?? Settings.GlobalMaxRounds ?? 10;
+        var maxRounds = runLease.MaxRounds;
         while (!state.StopRequested)
         {
             while ((state.UserChatFocused || state.VotePending) && !state.StopRequested)
@@ -1004,6 +1028,14 @@
             round++;
             if (round > maxRounds)
             {
+                state.StopRequested = true;
+                break;
+            }
+            // Participants can be added mid-run; the cap holds for every round, not just the start.
+            try { Guard.CheckParticipants(active.Participants.Count); }
+            catch (UserFacingException ex)
+            {
+                state.Error = ex.Message;
                 state.StopRequested = true;
                 break;
             }
@@ -1111,6 +1143,13 @@
                     // nothing to show. Leave the turn unspoken; a resume asks this participant again.
                     break;
                 }
+                catch (UserFacingException ex)
+                {
+                    // A ThinkTank limit (daily budget, usage not recordable): stop the run and say why.
+                    state.Error = ex.Message;
+                    state.RequestStop();
+                    break;
+                }
                 catch (Exception ex)
                 {
                     // TT-T44: the provider's own error text goes to the log only; the bubble and the saved
@@ -1170,6 +1209,8 @@
     private async Task GenerateChatTitleAsync(ChatConversation convo, ConversationUiState state)
     {
         using var diagnosticsScope = ThinkTankService.BeginDiagnosticsScope(convo.ChatId, this);
+        // Started from the run, so it carries the run's account; charged as "title" calls.
+        using var caller = LlmCaller.Begin(LlmCaller.Current?.UserName, convo.ChatId, "title");
         try
         {
             var topic = convo.Topic ?? "";
@@ -1367,9 +1408,11 @@
         using var diagnosticsScope = active is null ? null : ThinkTankService.BeginDiagnosticsScope(active.ChatId, this);
         _generatingTopic = true;
         StateHasChanged();
+        using var caller = LlmCaller.Begin(await UserNameAsync(), active?.ChatId, "topic");
 
         try
         {
+            Guard.CheckAction(LlmCaller.Current?.UserName, "Generate");
             var participant = Settings.Templates.FirstOrDefault(t => t.ProviderId == providerId);
             var authJson = participant?.AuthOverrideJson;
 
@@ -1548,6 +1591,9 @@
         int round,
         CancellationToken ct)
     {
+        // Inside the run's scope; charged as "vote" calls (the daily budget applies, the Vote rate limit does not:
+        // the participant, not the user, asked for it).
+        using var caller = LlmCaller.Begin(LlmCaller.Current?.UserName, active.ChatId, "vote");
         var ts = DateTimeOffset.UtcNow;
         state.StatusEvents.Add(new StatusEvent(ts, $"Participant called a vote: \"{question}\""));
         active.StatusEvents.Add(new PersistedStatusEvent(ts, $"Participant called a vote: \"{question}\""));
@@ -1655,6 +1701,7 @@
         _voteError = null;
         await InvokeAsync(StateHasChanged);
 
+        using var caller = LlmCaller.Begin(await UserNameAsync(), active.ChatId, "vote");
         _voteQuestion = InputLimits.Clip(_voteQuestion, Settings.Limits.VoteText);
         _voteDirectionOptions = InputLimits.Clip(_voteDirectionOptions, Settings.Limits.VoteText);
 
@@ -1669,6 +1716,7 @@
             };
             var quorum = _voteType == VoteDialogType.FreeForm ? Quorum.Plurality : Quorum.SimpleMajority;
             var context = active.Topic ?? "";
+            Guard.CheckAction(LlmCaller.Current?.UserName, "Vote");
 
             var result = await VotingService.VoteAsync(active.Participants, _voteQuestion, context, options, quorum, _lifetime.Token);
 

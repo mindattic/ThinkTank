@@ -17,14 +17,15 @@ namespace ThinkTank.Core.Services;
 /// DI construction.
 /// </para>
 /// </summary>
-public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService settings, VotingConfiguration votingConfig, PsychometricProfileService psychometrics)
+public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService settings, VotingConfiguration votingConfig,
+    PsychometricProfileService psychometrics, LlmSpendGuard? guard = null)
 {
     /// <summary>
     /// Polls every participant on <paramref name="question"/> using their existing
     /// persona + per-participant auth/model overrides (if any). Returns the
     /// aggregated <see cref="VotingResult"/> from Legion.
     /// </summary>
-    public Task<VotingResult> VoteAsync(
+    public async Task<VotingResult> VoteAsync(
         IEnumerable<ChatParticipant> participants,
         string question,
         string context,
@@ -32,9 +33,15 @@ public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService 
         Quorum quorum,
         CancellationToken ct = default)
     {
+        var seats = participants.ToList();
+        // TT-T47: the participant cap holds for votes too; a vote asks every voter once.
+        var maxSeats = settings.Spend.MaxParticipants;
+        if (seats.Count > maxSeats)
+            throw new UserFacingException($"A vote can have at most {maxSeats} voters. Remove {seats.Count - maxSeats} participants to continue.");
+
         RefreshVotingConfigFromSettings();
 
-        var voters = MapToVoterProfilesWithPsychometrics(participants);
+        var voters = MapToVoterProfilesWithPsychometrics(seats);
 
         var request = new VoteRequest
         {
@@ -43,7 +50,32 @@ public class VotingService(LlmVotingService llmVoting, ThinkTankSettingsService 
             Options = options
         };
 
-        return llmVoting.VoteWithProfilesAsync(request, quorum, voters, ct);
+        // Charged to the signed-in account (one call per voter) and recorded before Legion asks anyone.
+        var promptChars = question.Length + context.Length + options.Sum(o => o.Length);
+        var usage = guard is null ? null
+            : await guard.BeginCallsAsync(voters.Select(x => (x.ProviderId, x.ModelOverride ?? "")).ToList(), promptChars, ct);
+        try
+        {
+            var result = await llmVoting.VoteWithProfilesAsync(request, quorum, voters, ct);
+            if (usage is not null)
+                foreach (var u in usage) await guard!.CompleteAsync(u, result.NarrativeSummary, error: null, cancelled: false);
+            return result;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            if (usage is not null)
+                foreach (var u in usage) await guard!.CompleteAsync(u, null, error: null, cancelled: true);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (usage is not null)
+            {
+                var friendly = ProviderErrorText.Describe(ex);
+                foreach (var u in usage) await guard!.CompleteAsync(u, null, friendly, cancelled: false);
+            }
+            throw;
+        }
     }
 
     /// <summary>

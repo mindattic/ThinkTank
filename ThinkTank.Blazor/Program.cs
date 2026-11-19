@@ -7,6 +7,7 @@ using MindAttic.Authentication.Web;
 using MindAttic.Vault.Configuration;
 using Microsoft.AspNetCore.DataProtection;
 using ThinkTank.Core.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,6 +96,11 @@ if (connectionString is null)
     return;
 }
 builder.Services.AddDbContext<ThinkTankAuthDbContext>(o => ThinkTankAuthDbContext.Configure(o, connectionString));
+// TT-T47: spend limits and the LlmUsage record (schema app). ThinkTankService and VotingService take the guard,
+// so every LLM call is charged to the signed-in account, refused past its daily budget and recorded.
+builder.Services.AddDbContextFactory<ThinkTankDbContext>(o => ThinkTankDbContext.Configure(o, connectionString));
+builder.Services.AddSingleton<ILlmUsageStore, EfLlmUsageStore>();
+builder.Services.AddSingleton<LlmSpendGuard>();
 try
 {
     hosting.EnsureKeyRingWritable();
@@ -125,6 +131,24 @@ try { await SignInStartup.EnsureReadyAsync(app.Services, hosting, Console.WriteL
 catch (ThinkTankHostingException ex)
 {
     Console.Error.WriteLine(ex.Message);
+    Environment.Exit(78);
+    return;
+}
+
+// TT-T47: the usage table must be current, or no LLM call could be counted (and none would be made).
+try
+{
+    await using var usageDb = await app.Services.GetRequiredService<IDbContextFactory<ThinkTankDbContext>>().CreateDbContextAsync();
+    var pendingUsage = (await usageDb.Database.GetPendingMigrationsAsync()).ToList();
+    if (pendingUsage.Count > 0)
+    {
+        Console.WriteLine($"[thinktank] Applying {pendingUsage.Count} pending app migration(s): {string.Join(", ", pendingUsage)}");
+        await usageDb.Database.MigrateAsync();
+    }
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"[thinktank] The usage table (database ThinkTank, schema app) could not be read or migrated, so no LLM call could be counted. Not starting. ({ex.GetBaseException().Message})");
     Environment.Exit(78);
     return;
 }
