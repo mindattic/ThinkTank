@@ -1,8 +1,17 @@
+@using Microsoft.AspNetCore.Components.Authorization
+
+@* TT-T46: AuthorizeRouteView so the pages' [Authorize] is enforced inside the circuit too. The first line of
+   defence is the sign-in gate and the fallback policy (Hosting/SignInGate.cs): no anonymous request reaches a
+   page or the Blazor hub at all. A session that ends while a circuit is open lands here and is sent to /login. *@
 <Router AppAssembly="typeof(ThinkTank.Shared.Components.Pages.Home).Assembly"
         AdditionalAssemblies="new[] { typeof(Routes).Assembly }"
         NotFoundPage="typeof(ThinkTank.Shared.Components.Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(ThinkTank.Shared.Components.Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(ThinkTank.Shared.Components.Layout.MainLayout)">
+            <NotAuthorized>
+                <RedirectToLogin />
+            </NotAuthorized>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

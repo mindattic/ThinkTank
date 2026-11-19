@@ -18,6 +18,8 @@
             <a class="settings-tab nav-tab vault-link" href="@SettingsCog.Link()" title="Open ThinkTank's settings in MindAttic Vault (link)" aria-label="Open ThinkTank's settings in MindAttic Vault (link)">&#8599;</a>
         }
     </div>
+    @* TT-T46: the account page (password, sign out) is a server-rendered endpoint, so load it in full. *@
+    <a class="settings-tab nav-tab nav-account" href="/account" @onclick="OpenAccount" @onclick:preventDefault title="Your account: change password, sign out">Account</a>
     @if (!HostMode.IsHosted && !string.IsNullOrEmpty(settingsMessage))
     {
         <div class="nav-status" role="status">@settingsMessage <a href="@SettingsCog.Link()">Open Vault</a></div>
@@ -49,6 +51,8 @@
         var result = SettingsCog.Open();
         settingsMessage = result.Opened ? null : result.Message;
     }
+
+    private void OpenAccount() => Nav.NavigateTo("/account", forceLoad: true);
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 }

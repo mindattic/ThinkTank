@@ -22,8 +22,14 @@ public sealed class ThinkTankHostingException(string message) : Exception(messag
 /// (for example <c>mindattic-thinktank.azurewebsites.net</c>). No wildcard, scheme or port.</description></item>
 /// <item><term>Hosting:RequireHttps</term><description>Default <c>true</c>.</description></item>
 /// <item><term>Hosting:TrustForwardedHeaders</term><description>Default <c>true</c>: read the proxy's <c>X-Forwarded-For</c> / <c>X-Forwarded-Proto</c>.</description></item>
+/// <item><term>Hosting:Auth:AllowedUsers</term><description>Optional; overrides the Vault setting "Allowed accounts". Public: the
+/// resulting list must not be empty. Local: empty lets any active account in.</description></item>
+/// <item><term>Hosting:DataProtection:KeyRingPath</term><description>Public: folder for the Data Protection key ring (login
+/// cookie, antiforgery, stored TOTP secrets); must survive restarts. Default on App Service:
+/// <c>%HOME%\data\ThinkTank\DataProtection-Keys</c>. Required elsewhere.</description></item>
 /// </list>
-/// <para>The numbers (HSTS max age, trusted proxy hops) are ThinkTank Vault settings, group Hosting.</para>
+/// <para>The numbers (HSTS max age, trusted proxy hops, sign-in rate limit) and "Require two-factor" are ThinkTank
+/// Vault settings (groups Hosting and Sign-in). A sign-in is required in both modes (TT-T46).</para>
 /// </summary>
 public sealed class ThinkTankHosting
 {
@@ -31,6 +37,8 @@ public sealed class ThinkTankHosting
     public const string AllowedHostsKey = "Hosting:AllowedHosts";
     public const string RequireHttpsKey = "Hosting:RequireHttps";
     public const string TrustForwardedHeadersKey = "Hosting:TrustForwardedHeaders";
+    public const string AllowedUsersKey = "Hosting:Auth:AllowedUsers";
+    public const string KeyRingPathKey = "Hosting:DataProtection:KeyRingPath";
 
     public bool IsPublic { get; private init; }
     public IReadOnlyList<string> AllowedHosts { get; private init; } = [];
@@ -38,6 +46,22 @@ public sealed class ThinkTankHosting
     public bool TrustForwardedHeaders { get; private init; } = true;
     public int HstsMaxAgeDays { get; private init; } = 365;
     public int ForwardLimit { get; private init; } = 1;
+    /// <summary>Accounts allowed in. Empty (Local only) lets any active account in.</summary>
+    public IReadOnlyList<string> AllowedUsers { get; private init; } = [];
+    public bool RequireMfa { get; private init; } = true;
+    public int LoginPermitLimit { get; private init; } = 10;
+    public int LoginWindowSeconds { get; private init; } = 60;
+    /// <summary>Public: the Data Protection key-ring folder. Local: empty (the auth library's per-user default).</summary>
+    public string KeyRingPath { get; private init; } = "";
+
+    /// <summary>The account created from the bootstrap token when the auth tables hold no user.</summary>
+    public string FirstAccountName => AllowedUsers.Count > 0 ? AllowedUsers[0] : "admin";
+
+    public bool IsUserAllowed(string? userName) =>
+        !string.IsNullOrWhiteSpace(userName)
+        && (AllowedUsers.Count == 0
+            ? !IsPublic
+            : AllowedUsers.Any(u => string.Equals(u, userName.Trim(), StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// Reads the mode. Local validates nothing it does not use. Public validates every key and throws
@@ -74,6 +98,25 @@ public sealed class ThinkTankHosting
         var requireHttps = ReadBool(config, RequireHttpsKey, true, problems);
         var trustForwarded = ReadBool(config, TrustForwardedHeadersKey, true, problems);
 
+        var users = SplitList(config, AllowedUsersKey);
+        if (users.Count == 0)
+            users = (settings.AllowedUsers ?? "").Split(';', ',').Select(u => u.Trim()).Where(u => u.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (isPublic && users.Count == 0)
+            problems.Add($"No account is allowed to sign in. Set {AllowedUsersKey} (or ThinkTank's Vault setting \"Allowed accounts\").");
+
+        var keyRing = (config[KeyRingPathKey] ?? "").Trim();
+        if (isPublic && keyRing.Length == 0)
+        {
+            // App Service: HOME is the persistent, instance-shared content share (C:\home, /home).
+            var home = env("HOME");
+            if (onAppService && !string.IsNullOrWhiteSpace(home))
+                keyRing = Path.Combine(home, "data", "ThinkTank", "DataProtection-Keys");
+            else
+                problems.Add($"{KeyRingPathKey} is not set. Give a folder that survives restarts: it holds the keys behind the " +
+                             "login cookie and the stored TOTP secrets.");
+        }
+
         if (problems.Count > 0)
             throw new ThinkTankHostingException(
                 "[thinktank] Hosting is not configured correctly; not starting." + Environment.NewLine +
@@ -87,7 +130,33 @@ public sealed class ThinkTankHosting
             TrustForwardedHeaders = trustForwarded,
             HstsMaxAgeDays = Math.Clamp(settings.HstsMaxAgeDays, 0, 3650),
             ForwardLimit = Math.Clamp(settings.ForwardLimit, 1, 10),
+            AllowedUsers = users,
+            RequireMfa = settings.RequireTwoFactor,
+            LoginPermitLimit = Math.Clamp(settings.LoginPermitLimit, 1, 10_000),
+            LoginWindowSeconds = Math.Clamp(settings.LoginWindowSeconds, 1, 86_400),
+            KeyRingPath = keyRing,
         };
+    }
+
+    /// <summary>
+    /// Public: creates the key-ring folder and proves it is writable. A ring that cannot be written falls back to
+    /// in-memory keys, which silently signs everyone out and orphans the TOTP secrets on every restart.
+    /// </summary>
+    public void EnsureKeyRingWritable()
+    {
+        if (!IsPublic) return;
+        try
+        {
+            Directory.CreateDirectory(KeyRingPath);
+            var probe = Path.Combine(KeyRingPath, $".write-probe-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            throw new ThinkTankHostingException(
+                $"[thinktank] The Data Protection key ring folder '{KeyRingPath}' ({KeyRingPathKey}) cannot be written: {ex.Message} Not starting.");
+        }
     }
 
     /// <summary>A list given as one "a;b,c" string or as an indexed section (Key:0, Key:1).</summary>

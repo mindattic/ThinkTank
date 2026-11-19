@@ -10,6 +10,17 @@
     <ItemGroup>
         <PackageReference Include="MindAttic.Legion" Version="27.0.0" />
         <PackageReference Include="MindAttic.Vault" Version="7.0.0" />
+
+        <!-- TT-T46: sign-in. MindAttic.Authentication owns the auth schema; ThinkTank's DbContext implements its
+             data seam over the ThinkTank Azure SQL database (EF Core, SQL Server). -->
+        <PackageReference Include="MindAttic.Authentication" Version="7.0.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
+        <!-- SqlClient brings Pkcs 10.0.0, which has known advisories (GHSA-2fmv-rv2c-59x7, GHSA-846f-f764-76mx). -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
     </ItemGroup>
 
 </Project>

@@ -122,6 +122,29 @@ public sealed class ThinkTankSettings
     [SettingRange(1, 10)]
     public int ForwardLimit { get; set; } = 1;
 
+    // ---- Sign-in (TT-T46) ---------------------------------------------------------------
+    // Accounts are MindAttic.Authentication's (ThinkTank database, schema auth). There is no self-registration.
+
+    [Setting("Allowed accounts", Group = "Sign-in", Order = 1,
+        Help = "User names allowed to sign in, separated by ; or ,. Any other account is refused even with the right " +
+               "password. The first name is the account created from the bootstrap token on first start. Hosted, " +
+               "Hosting:Auth:AllowedUsers overrides this.")]
+    public string AllowedUsers { get; set; } = "";
+
+    [Setting("Require two-factor", Group = "Sign-in", Order = 2,
+        Help = "Every account must enrol an authenticator app (TOTP) at first sign-in and use it each time.")]
+    public bool RequireTwoFactor { get; set; } = true;
+
+    [Setting("Sign-in attempts per window", Group = "Sign-in", Order = 3,
+        Help = "Requests per address to the sign-in endpoints within the window below, on top of the auth library's own back-off.")]
+    [SettingRange(1, 10_000)]
+    public int LoginPermitLimit { get; set; } = 10;
+
+    [Setting("Sign-in window (seconds)", Group = "Sign-in", Order = 4,
+        Help = "Length of the sign-in rate-limit window.")]
+    [SettingRange(1, 86_400)]
+    public int LoginWindowSeconds { get; set; } = 60;
+
     // ---- Providers ----------------------------------------------------------------------
 
     [Setting("Provider models", Group = "Providers", Order = 1,

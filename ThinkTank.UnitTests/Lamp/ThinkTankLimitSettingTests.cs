@@ -81,6 +81,47 @@ public partial class ThinkTankSettingTests
         Assert.That(new ThinkTankSettings().ForwardLimit, Is.EqualTo(1));
         Assert.That(HostingAfter(s => s.ForwardLimit = 3, "forwardLimit", 3).ForwardLimit, Is.EqualTo(3));
     }
+
+    // ---- Sign-in (TT-T46) ---------------------------------------------------------------
+
+    private static ThinkTank.Blazor.Hosting.ThinkTankHosting LocalHostingAfter(Action<ThinkTankSettings> change, string path, JsonNode expected)
+    {
+        var store = TestLamp.Store();
+        store.Update(change);
+        var loaded = AssertStoredUnderManifestName(store, path, expected);
+        return ThinkTank.Blazor.Hosting.ThinkTankHosting.Read(new ConfigurationBuilder().Build(), loaded, _ => null);
+    }
+
+    [Test]
+    public void Setting_AllowedUsers_RoundTripsAndIsTheAllowList()
+    {
+        Assert.That(new ThinkTankSettings().AllowedUsers, Is.EqualTo(""));
+        var hosting = LocalHostingAfter(s => s.AllowedUsers = "ryan; erin", "allowedUsers", "ryan; erin");
+        Assert.That(hosting.AllowedUsers, Is.EqualTo(new[] { "ryan", "erin" }));
+        Assert.That(hosting.FirstAccountName, Is.EqualTo("ryan"));
+        Assert.That(hosting.IsUserAllowed("mallory"), Is.False);
+    }
+
+    [Test]
+    public void Setting_RequireTwoFactor_RoundTripsAndIsTheGatesMfaRule()
+    {
+        Assert.That(new ThinkTankSettings().RequireTwoFactor, Is.True);
+        Assert.That(LocalHostingAfter(s => s.RequireTwoFactor = false, "requireTwoFactor", false).RequireMfa, Is.False);
+    }
+
+    [Test]
+    public void Setting_LoginPermitLimit_RoundTripsAndIsTheSignInRateLimit()
+    {
+        Assert.That(new ThinkTankSettings().LoginPermitLimit, Is.EqualTo(10));
+        Assert.That(LocalHostingAfter(s => s.LoginPermitLimit = 5, "loginPermitLimit", 5).LoginPermitLimit, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void Setting_LoginWindowSeconds_RoundTripsAndIsTheSignInWindow()
+    {
+        Assert.That(new ThinkTankSettings().LoginWindowSeconds, Is.EqualTo(60));
+        Assert.That(LocalHostingAfter(s => s.LoginWindowSeconds = 120, "loginWindowSeconds", 120).LoginWindowSeconds, Is.EqualTo(120));
+    }
 }
 
 /// <summary>TT-T44: clipping and the friendly provider-error text.</summary>

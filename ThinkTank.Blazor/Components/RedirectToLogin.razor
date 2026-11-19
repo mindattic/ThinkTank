@@ -1,0 +1,11 @@
+@inject NavigationManager Nav
+
+@code {
+    // AuthorizeRouteView's NotAuthorized: a full page load to the sign-in page (a server-rendered endpoint, not a
+    // Blazor route), keeping the page the user was on as the return address.
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(new Uri(Nav.Uri).PathAndQuery);
+        Nav.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
+    }
+}
