@@ -1,6 +1,7 @@
 using ThinkTank.Core.Models;
 using ThinkTank.Core.Services;
 using ThinkTank.Blazor.Components;
+using ThinkTank.Blazor.Hosting;
 using MindAttic.Legion;
 using MindAttic.Vault.Configuration;
 
@@ -64,14 +65,24 @@ builder.Services.AddLLMVoting(sp => new VotingConfiguration
 });
 builder.Services.AddSingleton<VotingService>();
 
+// TT-T45: Local (the owner's machine, the default) or Public (served to the internet; fail closed when its
+// configuration is incomplete). See Hosting/ThinkTankHosting.cs for every key.
+ThinkTankHosting hosting;
+try { hosting = ThinkTankHosting.Read(builder.Configuration, thinkTankSettings.Current); }
+catch (ThinkTankHostingException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    Environment.Exit(78); // EX_CONFIG: the platform should see a failed start at once
+    return;
+}
+builder.Services.AddSingleton(hosting);
+
 var app = builder.Build();
 
+// Forwarded headers, host allow-list, HTTPS + HSTS, security headers and the CSP, before everything else.
+app.UseThinkTankTransport(hosting);
 if (!app.Environment.IsDevelopment())
-{
     app.UseExceptionHandler("/Error");
-    app.UseHsts();
-    app.UseHttpsRedirection();
-}
 app.UseStaticFiles();
 app.UseAntiforgery();
 

@@ -96,7 +96,7 @@ public partial class ThinkTankSettingTests
             var pascal = char.ToUpperInvariant(field.Property[0]) + field.Property[1..];
             Assert.That(tested.Count(t => t.StartsWith("Setting_" + pascal + "_")), Is.EqualTo(1), field.Property);
         }
-        Assert.That(manifest.Fields.Count(f => f.Kind != SettingKind.Object), Is.EqualTo(14));
+        Assert.That(manifest.Fields.Count(f => f.Kind != SettingKind.Object), Is.EqualTo(16));
 
         // Provider leaves each get their own case of ProviderSetting_ImportsRoundTripsAndShapesTheRequest.
         var leaves = manifest.AllFields().Where(f => f.Name.StartsWith($"{Prefix}:providers:") && f.Kind != SettingKind.Object).Select(f => f.Name).ToList();

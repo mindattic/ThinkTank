@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using ThinkTank.Core.Services;
 
@@ -52,6 +53,33 @@ public partial class ThinkTankSettingTests
     {
         Assert.That(new ThinkTankSettings().MaxVoteTextLength, Is.EqualTo(500));
         Assert.That(LimitsAfter(s => s.MaxVoteTextLength = 77, "maxVoteTextLength", 77).VoteText, Is.EqualTo(77));
+    }
+
+    // ---- Hosting (TT-T45) ---------------------------------------------------------------
+
+    private static ThinkTank.Blazor.Hosting.ThinkTankHosting HostingAfter(Action<ThinkTankSettings> change, string path, JsonNode expected)
+    {
+        var store = TestLamp.Store();
+        store.Update(change);
+        var loaded = AssertStoredUnderManifestName(store, path, expected);
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Hosting:Mode"] = "Public", ["Hosting:AllowedHosts"] = "a.example" })
+            .Build();
+        return ThinkTank.Blazor.Hosting.ThinkTankHosting.Read(config, loaded, _ => null);
+    }
+
+    [Test]
+    public void Setting_HstsMaxAgeDays_RoundTripsAndIsTheHstsAge()
+    {
+        Assert.That(new ThinkTankSettings().HstsMaxAgeDays, Is.EqualTo(365));
+        Assert.That(HostingAfter(s => s.HstsMaxAgeDays = 90, "hstsMaxAgeDays", 90).HstsMaxAgeDays, Is.EqualTo(90));
+    }
+
+    [Test]
+    public void Setting_ForwardLimit_RoundTripsAndIsTheTrustedHopCount()
+    {
+        Assert.That(new ThinkTankSettings().ForwardLimit, Is.EqualTo(1));
+        Assert.That(HostingAfter(s => s.ForwardLimit = 3, "forwardLimit", 3).ForwardLimit, Is.EqualTo(3));
     }
 }
 

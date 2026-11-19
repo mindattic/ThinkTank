@@ -27,5 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ThinkTank.Core\ThinkTank.Core.csproj" />
     <ProjectReference Include="..\ThinkTank.Shared\ThinkTank.Shared.csproj" />
+    <!-- TT-T45: the host's hosting rules (ThinkTank.Blazor/Hosting) are unit-tested too. -->
+    <ProjectReference Include="..\ThinkTank.Blazor\ThinkTank.Blazor.csproj" />
   </ItemGroup>
 </Project>

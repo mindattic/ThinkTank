@@ -109,6 +109,19 @@ public sealed class ThinkTankSettings
     [SettingRange(20, 10_000)]
     public int MaxVoteTextLength { get; set; } = 500;
 
+    // ---- Hosting (TT-T45) ---------------------------------------------------------------
+    // Only used when ThinkTank is served to other machines (Hosting:Mode=Public); read once at startup.
+
+    [Setting("HSTS max age (days)", Group = "Hosting", Order = 1,
+        Help = "How long browsers remember to use HTTPS only for the hosted site. 0 sends no HSTS header.")]
+    [SettingRange(0, 3650)]
+    public int HstsMaxAgeDays { get; set; } = 365;
+
+    [Setting("Trusted proxy hops", Group = "Hosting", Order = 2,
+        Help = "How many X-Forwarded-For / X-Forwarded-Proto entries to trust (App Service's front end adds one).")]
+    [SettingRange(1, 10)]
+    public int ForwardLimit { get; set; } = 1;
+
     // ---- Providers ----------------------------------------------------------------------
 
     [Setting("Provider models", Group = "Providers", Order = 1,
