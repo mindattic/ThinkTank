@@ -28,6 +28,8 @@ Desktop.ini
 # NuGet
 **/packages/
 *.nupkg
+# TT-T48: the vendored MindAttic.* packages the Azure deploy restores from
+!lib/local-packages/*.nupkg
 *.snupkg
 
 # Logs

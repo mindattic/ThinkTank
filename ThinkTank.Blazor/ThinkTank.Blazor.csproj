@@ -7,6 +7,13 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <!-- TT-T48: hosted, the Data Protection key ring is an Azure blob wrapped by a Key Vault key (as Tutor does). -->
+    <ItemGroup>
+        <PackageReference Include="Azure.Identity" Version="1.21.0" />
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="1.5.3" />
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.6.3" />
+    </ItemGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\ThinkTank.Core\ThinkTank.Core.csproj" />
         <ProjectReference Include="..\ThinkTank.Shared\ThinkTank.Shared.csproj" />

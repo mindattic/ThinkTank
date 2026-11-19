@@ -110,7 +110,16 @@ try
         o.IsProduction = hosting.IsPublic;
         // Hosted: the ring must outlive the process (login cookie, antiforgery, circuit state, stored TOTP
         // secrets). Local: the library keeps it under %APPDATA%\MindAttic\DataProtection\ThinkTank.
-        if (hosting.IsPublic)
+        // TT-T48: on Azure the ring is a blob wrapped by a Key Vault key (as Tutor does), reached with the site's
+        // managed identity, so it survives restarts, redeploys and a move to another plan.
+        if (hosting.KeyRingInAzure)
+            o.ConfigureDataProtection = dp =>
+            {
+                var credential = new Azure.Identity.DefaultAzureCredential();
+                dp.PersistKeysToAzureBlobStorage(hosting.KeyRingBlobUri!, credential)
+                  .ProtectKeysWithAzureKeyVault(hosting.KeyRingKeyVaultKeyId!, credential);
+            };
+        else if (hosting.IsPublic)
             o.ConfigureDataProtection = dp => dp.PersistKeysToFileSystem(new DirectoryInfo(hosting.KeyRingPath));
     });
     builder.Services.AddSignInGate(hosting);

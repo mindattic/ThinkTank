@@ -26,7 +26,10 @@ public sealed class ThinkTankHostingException(string message) : Exception(messag
 /// resulting list must not be empty. Local: empty lets any active account in.</description></item>
 /// <item><term>Hosting:DataProtection:KeyRingPath</term><description>Public: folder for the Data Protection key ring (login
 /// cookie, antiforgery, stored TOTP secrets); must survive restarts. Default on App Service:
-/// <c>%HOME%\data\ThinkTank\DataProtection-Keys</c>. Required elsewhere.</description></item>
+/// <c>%HOME%\data\ThinkTank\DataProtection-Keys</c>. Required elsewhere. Not used when the blob ring below is set.</description></item>
+/// <item><term>DataProtection:BlobUri</term> + <term>DataProtection:KeyVaultKeyId</term><description>Public, optional (TT-T48, the
+/// Tutor way): keep the key ring in an Azure blob, wrapped by a Key Vault key, reached with the site's managed identity. Set
+/// both or neither; when set they win over the key-ring folder.</description></item>
 /// </list>
 /// <para>The numbers (HSTS max age, trusted proxy hops, sign-in rate limit) and "Require two-factor" are ThinkTank
 /// Vault settings (groups Hosting and Sign-in). A sign-in is required in both modes (TT-T46).</para>
@@ -39,6 +42,8 @@ public sealed class ThinkTankHosting
     public const string TrustForwardedHeadersKey = "Hosting:TrustForwardedHeaders";
     public const string AllowedUsersKey = "Hosting:Auth:AllowedUsers";
     public const string KeyRingPathKey = "Hosting:DataProtection:KeyRingPath";
+    public const string BlobUriKey = "DataProtection:BlobUri";
+    public const string KeyVaultKeyIdKey = "DataProtection:KeyVaultKeyId";
 
     public bool IsPublic { get; private init; }
     public IReadOnlyList<string> AllowedHosts { get; private init; } = [];
@@ -53,6 +58,12 @@ public sealed class ThinkTankHosting
     public int LoginWindowSeconds { get; private init; } = 60;
     /// <summary>Public: the Data Protection key-ring folder. Local: empty (the auth library's per-user default).</summary>
     public string KeyRingPath { get; private init; } = "";
+    /// <summary>Public, optional: the blob that holds the key ring (with <see cref="KeyRingKeyVaultKeyId"/>). Null: the folder.</summary>
+    public Uri? KeyRingBlobUri { get; private init; }
+    /// <summary>The Key Vault key that wraps the key ring kept in <see cref="KeyRingBlobUri"/>.</summary>
+    public Uri? KeyRingKeyVaultKeyId { get; private init; }
+    /// <summary>True when the key ring lives in Azure blob storage under a Key Vault key, not in a folder.</summary>
+    public bool KeyRingInAzure => KeyRingBlobUri is not null && KeyRingKeyVaultKeyId is not null;
 
     /// <summary>The account created from the bootstrap token when the auth tables hold no user.</summary>
     public string FirstAccountName => AllowedUsers.Count > 0 ? AllowedUsers[0] : "admin";
@@ -105,8 +116,14 @@ public sealed class ThinkTankHosting
         if (isPublic && users.Count == 0)
             problems.Add($"No account is allowed to sign in. Set {AllowedUsersKey} (or ThinkTank's Vault setting \"Allowed accounts\").");
 
+        var blobUri = ReadHttpsUri(config, BlobUriKey, problems);
+        var kvKeyId = ReadHttpsUri(config, KeyVaultKeyIdKey, problems);
+        if ((blobUri is null) != (kvKeyId is null) && !problems.Any(p => p.Contains("DataProtection:")))
+            problems.Add($"Set both {BlobUriKey} and {KeyVaultKeyIdKey} (the key-ring blob and the Key Vault key that wraps it), or neither.");
+        var ringInAzure = isPublic && blobUri is not null && kvKeyId is not null;
+
         var keyRing = (config[KeyRingPathKey] ?? "").Trim();
-        if (isPublic && keyRing.Length == 0)
+        if (isPublic && !ringInAzure && keyRing.Length == 0)
         {
             // App Service: HOME is the persistent, instance-shared content share (C:\home, /home).
             var home = env("HOME");
@@ -134,7 +151,9 @@ public sealed class ThinkTankHosting
             RequireMfa = settings.RequireTwoFactor,
             LoginPermitLimit = Math.Clamp(settings.LoginPermitLimit, 1, 10_000),
             LoginWindowSeconds = Math.Clamp(settings.LoginWindowSeconds, 1, 86_400),
-            KeyRingPath = keyRing,
+            KeyRingPath = ringInAzure ? "" : keyRing,
+            KeyRingBlobUri = ringInAzure ? blobUri : null,
+            KeyRingKeyVaultKeyId = ringInAzure ? kvKeyId : null,
         };
     }
 
@@ -144,7 +163,7 @@ public sealed class ThinkTankHosting
     /// </summary>
     public void EnsureKeyRingWritable()
     {
-        if (!IsPublic) return;
+        if (!IsPublic || KeyRingInAzure) return;
         try
         {
             Directory.CreateDirectory(KeyRingPath);
@@ -170,6 +189,15 @@ public sealed class ThinkTankHosting
             .Where(v => v.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    internal static Uri? ReadHttpsUri(IConfiguration config, string key, List<string> problems)
+    {
+        var raw = (config[key] ?? "").Trim();
+        if (raw.Length == 0) return null;
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps) return uri;
+        problems.Add($"{key} must be an absolute https URL.");
+        return null;
     }
 
     internal static bool ReadBool(IConfiguration config, string key, bool fallback, List<string> problems)
