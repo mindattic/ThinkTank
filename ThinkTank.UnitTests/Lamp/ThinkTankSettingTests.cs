@@ -18,7 +18,7 @@ namespace ThinkTank.UnitTests.Lamp;
 /// HTTP request sent to the provider where the setting shapes it).
 /// </summary>
 [TestFixture, NonParallelizable]
-public class ThinkTankSettingTests
+public partial class ThinkTankSettingTests
 {
     private static readonly string Prefix = SettingsManifest.PrefixFor(ThinkTankSettings.AppId);
 
@@ -96,7 +96,7 @@ public class ThinkTankSettingTests
             var pascal = char.ToUpperInvariant(field.Property[0]) + field.Property[1..];
             Assert.That(tested.Count(t => t.StartsWith("Setting_" + pascal + "_")), Is.EqualTo(1), field.Property);
         }
-        Assert.That(manifest.Fields.Count(f => f.Kind != SettingKind.Object), Is.EqualTo(9));
+        Assert.That(manifest.Fields.Count(f => f.Kind != SettingKind.Object), Is.EqualTo(14));
 
         // Provider leaves each get their own case of ProviderSetting_ImportsRoundTripsAndShapesTheRequest.
         var leaves = manifest.AllFields().Where(f => f.Name.StartsWith($"{Prefix}:providers:") && f.Kind != SettingKind.Object).Select(f => f.Name).ToList();

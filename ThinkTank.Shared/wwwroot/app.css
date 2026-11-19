@@ -2228,3 +2228,15 @@ a.settings-tab.active {
     box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
 
+
+/* TT-T44: the /Error page and the in-page ErrorBoundary message. */
+.error-page {
+    max-width: 40rem;
+    margin: 3rem auto;
+    padding: 0 16px;
+}
+
+.error-page .error-ref {
+    opacity: 0.75;
+    font-size: 0.9em;
+}

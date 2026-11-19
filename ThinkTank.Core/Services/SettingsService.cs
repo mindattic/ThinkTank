@@ -80,6 +80,11 @@ public class ThinkTankSettingsService
     /// <summary>Global default response-length preset (<see cref="ResponseLengthPreset"/>).</summary>
     public string? GlobalResponseLength => ResponseLengthPreset.Normalize(S.GlobalResponseLength);
 
+    /// <summary>Longest text accepted per input field (TT-T44); read live from ThinkTank's Vault settings.</summary>
+    public InputLimits Limits => new(
+        Math.Max(1, S.MaxTopicLength), Math.Max(1, S.MaxMessageLength), Math.Max(1, S.MaxPersonaLength),
+        Math.Max(1, S.MaxTitleLength), Math.Max(1, S.MaxVoteTextLength));
+
     /// <summary>
     /// When <c>true</c>, every non-Claude participant routes through the Anthropic API, with the
     /// Claude model roleplaying as that participant's persona.

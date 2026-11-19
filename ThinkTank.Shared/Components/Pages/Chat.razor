@@ -6,6 +6,7 @@
 @inject SettingsService Settings
 @inject ChatConversationsService Conversations
 @inject IJSRuntime JS
+@inject ILogger<Chat> Log
 @implements IDisposable
 
 <PageTitle>Think Tank</PageTitle>
@@ -58,7 +59,7 @@
                  @onclick:stopPropagation>
                 <div id="rename-tab-title" class="dialog-title">Rename Tab</div>
                 <label for="rename-tab-input" class="visually-hidden">Tab name</label>
-                <input id="rename-tab-input" class="rename-input" @bind="_renameText" @bind:event="oninput" @onkeydown="OnRenameKeyDown" />
+                <input id="rename-tab-input" class="rename-input" maxlength="@Settings.Limits.Title" @bind="_renameText" @bind:event="oninput" @onkeydown="OnRenameKeyDown" />
                 <div class="dialog-actions" style="margin-top:1rem;">
                     <button class="reset-btn" @onclick="CancelRename">Cancel</button>
                     <button class="start-btn" @onclick="ConfirmRename">Save</button>
@@ -96,12 +97,12 @@
                 </fieldset>
 
                 <label class="options-label" for="vote-question">Question</label>
-                <input id="vote-question" class="rename-input" @bind="_voteQuestion" @bind:event="oninput" required aria-required="true" />
+                <input id="vote-question" class="rename-input" maxlength="@Settings.Limits.VoteText" @bind="_voteQuestion" @bind:event="oninput" required aria-required="true" />
 
                 @if (_voteType == VoteDialogType.Direction)
                 {
                     <label class="options-label" for="vote-direction-options" style="margin-top:0.5rem;">Options (comma-separated)</label>
-                    <input id="vote-direction-options" class="rename-input" @bind="_voteDirectionOptions" @bind:event="oninput"
+                    <input id="vote-direction-options" class="rename-input" maxlength="@Settings.Limits.VoteText" @bind="_voteDirectionOptions" @bind:event="oninput"
                            placeholder="Option A, Option B, Option C" required aria-required="true" />
                 }
 
@@ -189,7 +190,7 @@
         {
             <div class="setup-panel" role="region" aria-label="Conversation setup">
                 <label for="setup-topic">Discussion Topic</label>
-                <textarea id="setup-topic" value="@Active.Topic" @oninput="OnTopicInput" rows="3" placeholder="e.g. Is consciousness computational?" aria-required="true"></textarea>
+                <textarea id="setup-topic" value="@Active.Topic" maxlength="@Settings.Limits.Topic" @oninput="OnTopicInput" rows="3" placeholder="e.g. Is consciousness computational?" aria-required="true"></textarea>
 
                 <div class="random-topic-row">
                     <span style="flex:1"></span>
@@ -407,7 +408,7 @@
                         <div class="chat-bottom-bar">
                             <div class="user-chat" role="form" aria-label="Send a message to steer the conversation">
                                 <label for="user-chat-input" class="visually-hidden">Your message</label>
-                                <input id="user-chat-input" class="user-chat-input" placeholder="Type a message to steer the conversation…" @bind="_userMessage" @bind:event="oninput"
+                                <input id="user-chat-input" class="user-chat-input" maxlength="@Settings.Limits.Message" placeholder="Type a message to steer the conversation…" @bind="_userMessage" @bind:event="oninput"
                                        @onfocus="OnUserChatFocus" @onblur="OnUserChatBlur" @onkeydown="OnUserChatKeyDown" />
                                 <button class="user-chat-send" @onclick="SendUserMessage" disabled="@(string.IsNullOrWhiteSpace(_userMessage) || ActiveState.Running == false)">Send</button>
                                 <button class="user-chat-clear" @onclick="ClearUserChat" title="Clear and unpause" aria-label="Clear message and unpause"><span aria-hidden="true">✕</span></button>
@@ -896,7 +897,7 @@
         if (Active is null)
             return;
 
-        Active.Topic = e.Value?.ToString() ?? "";
+        Active.Topic = InputLimits.Clip(e.Value?.ToString(), Settings.Limits.Topic);
         Conversations.NotifyChanged();
     }
 
@@ -1058,7 +1059,7 @@
                     if (voteMarker.Success)
                     {
                         var trimmedQuestion = voteMarker.Groups[1].Value.Trim();
-                        autoVoteQuestion = string.IsNullOrEmpty(trimmedQuestion) ? null : trimmedQuestion;
+                        autoVoteQuestion = string.IsNullOrEmpty(trimmedQuestion) ? null : InputLimits.Clip(trimmedQuestion, Settings.Limits.VoteText);
                         response = response.Replace(voteMarker.Value, "").Trim();
                     }
 
@@ -1112,15 +1113,21 @@
                 }
                 catch (Exception ex)
                 {
+                    // TT-T44: the provider's own error text goes to the log only; the bubble and the saved
+                    // transcript get a plain sentence and a reference that matches the log entry.
+                    var reference = ProviderErrorText.NewReference();
+                    Log.LogWarning(ex, "Turn failed (ref {Reference}): chat {ChatId}, participant {ParticipantId}, provider {Provider}",
+                        reference, active.ChatId, p.ParticipantId, p.ProviderId);
+                    var errorText = $"[Error: {ProviderErrorText.Describe(ex, p.DisplayName, reference)}]";
                     state.Messages.Add(new ConversationUiMessage
                     {
                         ParticipantId = p.ParticipantId,
-                        Text = $"[Error: {ex.Message}]",
+                        Text = errorText,
                         Round = round,
                         IsError = true
                     });
 
-                    active.Messages.Add(new PersistedMessage(p.ParticipantId, $"[Error: {ex.Message}]", round, true));
+                    active.Messages.Add(new PersistedMessage(p.ParticipantId, errorText, round, true));
                     Conversations.NotifyChanged();
                 }
 
@@ -1306,7 +1313,7 @@
         if (Active is null)
             return;
 
-        var text = (_userMessage ?? "").Trim();
+        var text = InputLimits.Clip((_userMessage ?? "").Trim(), Settings.Limits.Message);
         if (string.IsNullOrWhiteSpace(text))
             return;
 
@@ -1376,7 +1383,7 @@
 
             if (active is not null)
             {
-                active.Topic = topic.Trim().Trim('"', '\'');
+                active.Topic = InputLimits.Clip(topic.Trim().Trim('"', '\''), Settings.Limits.Topic);
                 Conversations.NotifyChanged();
             }
         }
@@ -1386,8 +1393,10 @@
         }
         catch (Exception ex)
         {
+            var reference = ProviderErrorText.NewReference();
+            Log.LogWarning(ex, "Random topic failed (ref {Reference}): provider {Provider}", reference, providerId);
             if (active is not null)
-                active.Topic = $"[Error generating topic: {ex.Message}]";
+                active.Topic = $"[Error generating topic: {ProviderErrorText.Describe(ex, null, reference)}]";
         }
         finally
         {
@@ -1444,7 +1453,7 @@
             var convo = Conversations.Conversations.FirstOrDefault(c => c.ChatId == _renameChatId);
             if (convo is not null)
             {
-                convo.Title = _renameText.Trim();
+                convo.Title = InputLimits.Clip(_renameText.Trim(), Settings.Limits.Title);
                 Conversations.NotifyChanged();
             }
         }
@@ -1584,8 +1593,11 @@
         catch (Exception ex)
         {
             var errTs = DateTimeOffset.UtcNow;
-            state.StatusEvents.Add(new StatusEvent(errTs, $"Vote failed: {ex.Message}"));
-            active.StatusEvents.Add(new PersistedStatusEvent(errTs, $"Vote failed: {ex.Message}"));
+            var reference = ProviderErrorText.NewReference();
+            Log.LogWarning(ex, "Participant vote failed (ref {Reference}): chat {ChatId}", reference, active.ChatId);
+            var failure = $"Vote failed: {ProviderErrorText.Describe(ex, null, reference)}";
+            state.StatusEvents.Add(new StatusEvent(errTs, failure));
+            active.StatusEvents.Add(new PersistedStatusEvent(errTs, failure));
         }
 
         await InvokeAsync(StateHasChanged);
@@ -1643,6 +1655,9 @@
         _voteError = null;
         await InvokeAsync(StateHasChanged);
 
+        _voteQuestion = InputLimits.Clip(_voteQuestion, Settings.Limits.VoteText);
+        _voteDirectionOptions = InputLimits.Clip(_voteDirectionOptions, Settings.Limits.VoteText);
+
         try
         {
             var options = _voteType switch
@@ -1684,7 +1699,9 @@
         }
         catch (Exception ex)
         {
-            _voteError = ex.Message;
+            var reference = ProviderErrorText.NewReference();
+            Log.LogWarning(ex, "Vote failed (ref {Reference}): chat {ChatId}", reference, active.ChatId);
+            _voteError = ProviderErrorText.Describe(ex, null, reference);
             _voteDialogVisible = true;
         }
         finally

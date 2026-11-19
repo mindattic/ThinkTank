@@ -9,11 +9,20 @@
     <link rel="stylesheet" href="_content/ThinkTank.Shared/app.css" />
     <link rel="stylesheet" href="ThinkTank.Blazor.styles.css" />
     <link rel="icon" href="data:," />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="PageRenderMode" />
     <script src="_content/ThinkTank.Shared/theme.js"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 </html>
+
+@code {
+    // Interactive Server everywhere except pages marked [ExcludeFromInteractiveRouting] (the /Error page),
+    // which render once on the server: an error page must not depend on a circuit (TT-T44).
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+}

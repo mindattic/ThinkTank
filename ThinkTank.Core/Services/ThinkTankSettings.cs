@@ -80,6 +80,35 @@ public sealed class ThinkTankSettings
         Help = "Route every participant through Claude, which roleplays each persona. Use when other providers are down. Also switchable on the chat page.")]
     public bool ClaudeFallbackMode { get; set; }
 
+    // ---- Input limits (TT-T44) -----------------------------------------------------------
+    // Longest text a browser may send in each field. Enforced on the server (the page's maxlength is only a
+    // convenience), so a crafted request can't paste a novel into every prompt.
+
+    [Setting("Topic length (characters)", Group = "Input limits", Order = 1,
+        Help = "Longest discussion topic a user can enter.")]
+    [SettingRange(50, 100_000)]
+    public int MaxTopicLength { get; set; } = 2000;
+
+    [Setting("Message length (characters)", Group = "Input limits", Order = 2,
+        Help = "Longest message a user can type into a running conversation.")]
+    [SettingRange(50, 100_000)]
+    public int MaxMessageLength { get; set; } = 4000;
+
+    [Setting("Persona length (characters)", Group = "Input limits", Order = 3,
+        Help = "Longest persona (markdown) a custom participant can have.")]
+    [SettingRange(100, 200_000)]
+    public int MaxPersonaLength { get; set; } = 8000;
+
+    [Setting("Name and title length (characters)", Group = "Input limits", Order = 4,
+        Help = "Longest conversation title, persona name or model name.")]
+    [SettingRange(10, 1000)]
+    public int MaxTitleLength { get; set; } = 100;
+
+    [Setting("Vote text length (characters)", Group = "Input limits", Order = 5,
+        Help = "Longest vote question, and longest list of vote options.")]
+    [SettingRange(20, 10_000)]
+    public int MaxVoteTextLength { get; set; } = 500;
+
     // ---- Providers ----------------------------------------------------------------------
 
     [Setting("Provider models", Group = "Providers", Order = 1,

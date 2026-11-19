@@ -1,0 +1,36 @@
+@page "/Error"
+@using System.Diagnostics
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Http
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+@* TT-T44: where UseExceptionHandler sends an unhandled error outside Development. Rendered on the server
+   without a circuit, says nothing about the failure itself (the details are in the log), and gives the
+   request id so a log entry can be found. *@
+
+<PageTitle>Something went wrong</PageTitle>
+
+<section class="error-page" aria-labelledby="error-heading">
+    <h1 id="error-heading">Something went wrong</h1>
+    <p role="alert">ThinkTank hit an unexpected error and couldn't finish that request. Nothing you typed was sent anywhere new.</p>
+    <p><a class="start-btn" href="/">Back to the start</a></p>
+    @if (!string.IsNullOrEmpty(RequestId))
+    {
+        <p class="error-ref">Reference: <code>@RequestId</code></p>
+    }
+</section>
+
+@code {
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    protected override void OnInitialized()
+    {
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+        // Never cache an error page: the next try should reach the real page.
+        if (HttpContext is { Response.HasStarted: false })
+            HttpContext.Response.Headers.CacheControl = "no-store";
+    }
+}

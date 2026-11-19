@@ -6,6 +6,7 @@
 @inject ChatLogService Chat
 @inject HumanNameService HumanNames
 @inject NameGeneratorService NameGen
+@inject ILogger<Personas> Log
 @implements IDisposable
 
 @* LAMP (TT-T27): ThinkTank's app-level settings (defaults, appearance, provider models, keys) are edited only
@@ -48,7 +49,7 @@
                         @if (_activeTemplate is not null)
                         {
                             <label for="persona-display-name">Display name</label>
-                            <input id="persona-display-name" value="@_activeTemplate.DisplayName" @oninput="OnTemplateNameChanged" placeholder="e.g. Bob Claude" disabled="@(_activeTemplate.IsDefault)" />
+                            <input id="persona-display-name" value="@_activeTemplate.DisplayName" maxlength="@ThinkTankSettings.Limits.Title" @oninput="OnTemplateNameChanged" placeholder="e.g. Bob Claude" disabled="@(_activeTemplate.IsDefault)" />
 
                             <label for="persona-provider">Provider</label>
                             <select id="persona-provider" value="@_activeTemplate.ProviderId" @onchange="OnTemplateProviderChanged" disabled="@(_activeTemplate.IsDefault)">
@@ -59,7 +60,7 @@
                             </select>
 
                             <label for="persona-model">Model override</label>
-                            <input id="persona-model"
+                            <input id="persona-model" maxlength="@ThinkTankSettings.Limits.Title"
                                    value='@GetTemplateAuthField(_activeTemplate, "model")'
                                    @oninput="OnTemplateModelChanged"
                                    placeholder="@GetDefaultModel(_activeTemplate.ProviderId)"
@@ -71,7 +72,7 @@
                             *@
 
                             <label for="persona-markdown">Persona (markdown)</label>
-                            <textarea id="persona-markdown" class="settings-textarea" @oninput="OnTemplatePersonalityChanged" rows="16" disabled="@(_activeTemplate.IsDefault)" aria-describedby="persona-markdown-hint">@_activeTemplate.PersonalityMarkdown</textarea>
+                            <textarea id="persona-markdown" class="settings-textarea" maxlength="@ThinkTankSettings.Limits.Persona" @oninput="OnTemplatePersonalityChanged" rows="16" disabled="@(_activeTemplate.IsDefault)" aria-describedby="persona-markdown-hint">@_activeTemplate.PersonalityMarkdown</textarea>
                             <p id="persona-markdown-hint" class="visually-hidden">Markdown describing the persona's voice, values, and habits.</p>
 
                             <div class="settings-row">
@@ -295,13 +296,15 @@
             var idx = ThinkTankSettings.Templates.FindIndex(t => t.TemplateId == template.TemplateId);
             if (idx >= 0)
             {
-                ThinkTankSettings.Templates[idx] = ThinkTankSettings.Templates[idx] with { PersonalityMarkdown = md };
+                ThinkTankSettings.Templates[idx] = ThinkTankSettings.Templates[idx] with { PersonalityMarkdown = InputLimits.Clip(md, ThinkTankSettings.Limits.Persona) };
                 ThinkTankSettings.SaveTemplates(ThinkTankSettings.Templates);
             }
         }
         catch (Exception ex)
         {
-            _lastError = ex.Message;
+            var reference = ProviderErrorText.NewReference();
+            Log.LogWarning(ex, "Generate personality failed (ref {Reference}): provider {Provider}", reference, template.ProviderId);
+            _lastError = ProviderErrorText.Describe(ex, template.DisplayName, reference);
         }
         finally
         {
@@ -310,7 +313,7 @@
     }
 
     private void OnTemplateNameChanged(ChangeEventArgs e)
-        => UpdateActiveTemplate(t => t with { DisplayName = e.Value?.ToString() ?? "" });
+        => UpdateActiveTemplate(t => t with { DisplayName = InputLimits.Clip(e.Value?.ToString(), ThinkTankSettings.Limits.Title) });
 
     private string GetTemplateAuthField(ParticipantTemplate? template, string field)
         => GetJsonString(template?.AuthOverrideJson, field);
@@ -319,7 +322,7 @@
         => LlmProviderCatalog.Get(providerId)?.DefaultModel ?? "";
 
     private void OnTemplateModelChanged(ChangeEventArgs e)
-        => UpdateActiveTemplate(t => t with { AuthOverrideJson = SetJsonString(t.AuthOverrideJson, "model", e.Value?.ToString()) });
+        => UpdateActiveTemplate(t => t with { AuthOverrideJson = SetJsonString(t.AuthOverrideJson, "model", InputLimits.Clip(e.Value?.ToString(), ThinkTankSettings.Limits.Title)) });
 
     private void OnTemplateProviderChanged(ChangeEventArgs e)
     {
@@ -338,7 +341,7 @@
     }
 
     private void OnTemplatePersonalityChanged(ChangeEventArgs e)
-        => UpdateActiveTemplate(t => t with { PersonalityMarkdown = e.Value?.ToString() ?? "" });
+        => UpdateActiveTemplate(t => t with { PersonalityMarkdown = InputLimits.Clip(e.Value?.ToString(), ThinkTankSettings.Limits.Persona) });
 
     private async Task TestTemplate()
     {
@@ -388,8 +391,11 @@
         }
         catch (Exception ex)
         {
-            Chat.Add(template.DisplayName, $"[TEST {chatId}] Error: {ex.Message}", isError: true);
-            _lastError = ex.Message;
+            var reference = ProviderErrorText.NewReference();
+            Log.LogWarning(ex, "Connection test failed (ref {Reference}): provider {Provider}", reference, template.ProviderId);
+            var friendly = ProviderErrorText.Describe(ex, template.DisplayName, reference);
+            Chat.Add(template.DisplayName, $"[TEST {chatId}] Error: {friendly}", isError: true);
+            _lastError = friendly;
         }
         finally
         {

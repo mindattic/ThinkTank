@@ -1,5 +1,7 @@
 using System.Text.Json;
 using MindAttic.Legion;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ThinkTank.Core.Models;
 
 namespace ThinkTank.Core.Services;
@@ -24,12 +26,15 @@ public class ThinkTankService
     private readonly LegionClient legion;
     private readonly ThinkTankSettingsService settings;
     private readonly PsychometricProfileService psychometrics;
+    private readonly ILogger logger;
 
-    public ThinkTankService(LegionClient legion, ThinkTankSettingsService settings, PsychometricProfileService psychometrics)
+    public ThinkTankService(LegionClient legion, ThinkTankSettingsService settings, PsychometricProfileService psychometrics,
+        ILogger<ThinkTankService>? logger = null)
     {
         this.legion = legion;
         this.settings = settings;
         this.psychometrics = psychometrics;
+        this.logger = (ILogger?)logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -224,7 +229,11 @@ public class ThinkTankService
         }
         catch (Exception ex)
         {
-            EmitDiagnostics(providerId, model, "", isError: true, errorMessage: ex.Message);
+            // TT-T44: the provider's own error text goes to the log only; the diagnostics panel (which the
+            // user sees) gets the plain sentence and a reference that matches the log entry.
+            var reference = ProviderErrorText.NewReference();
+            logger.LogWarning(ex, "LLM call failed (ref {Reference}): provider {Provider}, model {Model}", reference, actualProviderId, model);
+            EmitDiagnostics(providerId, model, "", isError: true, errorMessage: ProviderErrorText.Describe(ex, null, reference));
             throw;
         }
     }

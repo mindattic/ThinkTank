@@ -6,11 +6,31 @@
 <div class="page">
     <NavMenu />
     <main id="main-content" tabindex="-1">
-        @Body
+        @* TT-T44: an exception in a page shows this instead of killing the circuit; the details go to the
+           log (ErrorBoundary logs through ILogger), never to the screen. *@
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <ErrorContent>
+                <section class="error-page" role="alert" aria-labelledby="boundary-heading">
+                    <h1 id="boundary-heading">Something went wrong on this page</h1>
+                    <p>ThinkTank hit an unexpected error. The details were logged for the owner.</p>
+                    <p><button type="button" class="start-btn" @onclick="Recover">Try again</button></p>
+                </section>
+            </ErrorContent>
+        </ErrorBoundary>
     </main>
 </div>
 
 @code {
+    private ErrorBoundary? _errorBoundary;
+
+    // A new page starts clean, so an error on one page doesn't stick to the next.
+    protected override void OnParametersSet() => _errorBoundary?.Recover();
+
+    private void Recover() => _errorBoundary?.Recover();
+
     // Apply the saved appearance (ThinkTank's Vault settings) on first interactive render of any page.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
