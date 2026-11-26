@@ -52,7 +52,7 @@ public class ThinkTankLampTests
                 Assert.That(f.Kind, Is.Not.EqualTo(SettingKind.Unknown), f.Name);
             }
         });
-        Assert.That(m.Fields.Select(f => f.Group).Distinct(), Is.EquivalentTo(new[] { "Appearance", "Conversation defaults", "Providers" }));
+        Assert.That(m.Fields.Select(f => f.Group).Distinct(), Is.EquivalentTo(new[] { "Appearance", "Conversation defaults", "Input limits", "Spend limits", "Hosting", "Sign-in", "Providers" }));
     }
 
     [Test]
