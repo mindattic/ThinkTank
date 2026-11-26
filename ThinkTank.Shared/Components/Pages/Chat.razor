@@ -1383,16 +1383,24 @@
 
         // Append to the storage log so it can be fully recreated. The participantId is
         // recorded so the on-reload restore (ChatStorage.LoadTurnsAsync) can replay this
-        // user turn instead of dropping it.
-        await ChatStorage.AppendChatJsonAsync(Active.ChatId, new
+        // user turn instead of dropping it. A disk error here must not abort the send: the message is already
+        // on screen and in the conversation, so it still has to reach the next turn and clear the input.
+        try
         {
-            type = "user",
-            chatId = Active.ChatId,
-            participantId = "user",
-            round,
-            text,
-            ts = DateTimeOffset.UtcNow
-        });
+            await ChatStorage.AppendChatJsonAsync(Active.ChatId, new
+            {
+                type = "user",
+                chatId = Active.ChatId,
+                participantId = "user",
+                round,
+                text,
+                ts = DateTimeOffset.UtcNow
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.LogWarning(ex, "User message could not be written to the log for chat {ChatId}", Active.ChatId);
+        }
 
         // Also push into the next-turn context for all models.
         // We represent user turns as a pseudo-participant in shared history.
