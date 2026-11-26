@@ -402,18 +402,25 @@ public class ThinkTankSettingsService
     public void SetConversations(IEnumerable<PersistedConversation> convos)
     {
         var snapshot = convos.ToList();
-        Conversations.Clear();
-        Conversations.AddRange(snapshot);
-        Save();
+        // Under the save lock (reentrant) so a concurrent Save never enumerates the list mid-change.
+        lock (_saveLock)
+        {
+            Conversations.Clear();
+            Conversations.AddRange(snapshot);
+            Save();
+        }
     }
 
     /// <summary>Replaces all participant templates and writes to disk.</summary>
     public void SaveTemplates(IEnumerable<ParticipantTemplate> templates)
     {
         var snapshot = templates.ToList();
-        Templates.Clear();
-        Templates.AddRange(snapshot);
-        Save();
+        lock (_saveLock)
+        {
+            Templates.Clear();
+            Templates.AddRange(snapshot);
+            Save();
+        }
     }
 
     /// <summary>
@@ -440,22 +447,25 @@ public class ThinkTankSettingsService
 
         var voters = VoterFactory.GenerateUniqueVoters(count, available, fallbackProviderId, rng);
 
-        Templates.Clear();
-        foreach (var v in voters)
+        lock (_saveLock)
         {
-            var personaId = PersonaIdFromVoterId(v.VoterId);
-            Templates.Add(new ParticipantTemplate(
-                TemplateId: ChatConversationsService.NewId(),
-                ProviderId: v.ProviderId,
-                DisplayName: v.Name,
-                PersonalityMarkdown: v.PersonalityMarkdown,
-                AuthOverrideJson: null,
-                IsDefault: false)
+            Templates.Clear();
+            foreach (var v in voters)
             {
-                PersonaId = personaId
-            });
+                var personaId = PersonaIdFromVoterId(v.VoterId);
+                Templates.Add(new ParticipantTemplate(
+                    TemplateId: ChatConversationsService.NewId(),
+                    ProviderId: v.ProviderId,
+                    DisplayName: v.Name,
+                    PersonalityMarkdown: v.PersonalityMarkdown,
+                    AuthOverrideJson: null,
+                    IsDefault: false)
+                {
+                    PersonaId = personaId
+                });
+            }
+            Save();
         }
-        Save();
     }
 
     /// <summary>
