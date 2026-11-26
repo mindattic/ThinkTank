@@ -63,7 +63,8 @@ public partial class ThinkTankSettingTests
         store.Update(change);
         var loaded = AssertStoredUnderManifestName(store, path, expected);
         var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Hosting:Mode"] = "Public", ["Hosting:AllowedHosts"] = "a.example" })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Hosting:Mode"] = "Public", ["Hosting:AllowedHosts"] = "a.example",
+                ["Hosting:Auth:AllowedUsers"] = "tester", ["Hosting:DataProtection:KeyRingPath"] = Path.Combine(Path.GetTempPath(), "thinktank-test-keys") })
             .Build();
         return ThinkTank.Blazor.Hosting.ThinkTankHosting.Read(config, loaded, _ => null);
     }
