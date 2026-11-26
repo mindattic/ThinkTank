@@ -1840,16 +1840,24 @@
         ActiveState.Messages.Add(announcement);
         active.Messages.Add(new PersistedMessage("system", announcement.Text, round, false));
 
-        // Persist to the append-only log so the join notice survives a reload.
-        await ChatStorage.AppendChatJsonAsync(active.ChatId, new
+        // Persist to the append-only log so the join notice survives a reload. The participant is already added,
+        // so a disk error here must not abort the handler before the change is announced to the other views.
+        try
         {
-            type = "system",
-            chatId = active.ChatId,
-            participantId = "system",
-            round,
-            text = announcement.Text,
-            ts = DateTimeOffset.UtcNow
-        });
+            await ChatStorage.AppendChatJsonAsync(active.ChatId, new
+            {
+                type = "system",
+                chatId = active.ChatId,
+                participantId = "system",
+                round,
+                text = announcement.Text,
+                ts = DateTimeOffset.UtcNow
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.LogWarning(ex, "Join notice could not be written to the log for chat {ChatId}", active.ChatId);
+        }
 
         Conversations.NotifyChanged();
     }
