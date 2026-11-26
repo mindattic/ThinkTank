@@ -321,6 +321,18 @@ public class ThinkTankSettingsService
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[ThinkTank.Settings] failed to load Settings.json (will reinitialize with defaults): {ex.Message}");
+            // The caller seeds defaults and saves over this file; keep the unreadable one so the user's
+            // templates and conversations can be recovered by hand.
+            try
+            {
+                var backup = $"{SettingsPath}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmss}";
+                File.Copy(SettingsPath, backup, overwrite: true);
+                Console.Error.WriteLine($"[ThinkTank.Settings] the unreadable file was kept as {backup}");
+            }
+            catch (Exception copyEx)
+            {
+                Console.Error.WriteLine($"[ThinkTank.Settings] could not back up the unreadable Settings.json: {copyEx.Message}");
+            }
             return false;
         }
     }
