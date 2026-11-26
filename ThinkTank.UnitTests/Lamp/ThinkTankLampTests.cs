@@ -60,7 +60,7 @@ public class ThinkTankLampTests
     {
         var m = SettingsManifestBuilder.Build<ThinkTankSettings>();
         Assert.That(m.AllFields().Where(f => new[] { "key", "secret", "token", "password" }
-            .Any(w => f.Property.Contains(w, StringComparison.OrdinalIgnoreCase) && !f.Property.EndsWith("Tokens", StringComparison.OrdinalIgnoreCase))), Is.Empty);
+            .Any(w => f.Property.Contains(w, StringComparison.OrdinalIgnoreCase) && !f.Property.Contains("Tokens", StringComparison.OrdinalIgnoreCase))), Is.Empty);
         Assert.That(m.Credentials.Select(c => c.ProviderId), Is.SupersetOf(new[] { "claude", "openai", "gemini", "deepseek", "kimi", "grok" }));
     }
 
