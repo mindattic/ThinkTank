@@ -286,7 +286,11 @@ public class ThinkTankService
             {
                 using var doc = JsonDocument.Parse(authOverrideJson);
                 if (doc.RootElement.TryGetProperty("apiKey", out var apiKey))
-                    return apiKey.GetString() ?? "";
+                {
+                    // An empty or blank key is "no override": fall back to the Vault key, as GetKeyForProvider does.
+                    var value = apiKey.ValueKind == JsonValueKind.String ? apiKey.GetString() : null;
+                    return string.IsNullOrWhiteSpace(value) ? null : value;
+                }
             }
             catch (Exception ex)
             {
