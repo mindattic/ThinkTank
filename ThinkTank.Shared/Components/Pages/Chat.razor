@@ -1363,12 +1363,16 @@
     {
         if (Active is null)
             return;
+        // Pin to the conversation the message was typed in; the log append below yields the circuit and
+        // the user could switch tabs before it returns.
+        var active = Active;
+        var state = ActiveState;
 
         var text = InputLimits.Clip((_userMessage ?? "").Trim(), Settings.Limits.Message);
         if (string.IsNullOrWhiteSpace(text))
             return;
 
-        var round = ActiveState.Messages.Count == 0 ? 1 : ActiveState.Messages.Max(m => m.Round);
+        var round = state.Messages.Count == 0 ? 1 : state.Messages.Max(m => m.Round);
 
         var msg = new ConversationUiMessage
         {
@@ -1378,8 +1382,8 @@
             IsError = false
         };
 
-        ActiveState.Messages.Add(msg);
-        Active.Messages.Add(new PersistedMessage(msg.ParticipantId, msg.Text, msg.Round, msg.IsError));
+        state.Messages.Add(msg);
+        active.Messages.Add(new PersistedMessage(msg.ParticipantId, msg.Text, msg.Round, msg.IsError));
 
         // Append to the storage log so it can be fully recreated. The participantId is
         // recorded so the on-reload restore (ChatStorage.LoadTurnsAsync) can replay this
@@ -1387,10 +1391,10 @@
         // on screen and in the conversation, so it still has to reach the next turn and clear the input.
         try
         {
-            await ChatStorage.AppendChatJsonAsync(Active.ChatId, new
+            await ChatStorage.AppendChatJsonAsync(active.ChatId, new
             {
                 type = "user",
-                chatId = Active.ChatId,
+                chatId = active.ChatId,
                 participantId = "user",
                 round,
                 text,
@@ -1399,13 +1403,13 @@
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Log.LogWarning(ex, "User message could not be written to the log for chat {ChatId}", Active.ChatId);
+            Log.LogWarning(ex, "User message could not be written to the log for chat {ChatId}", active.ChatId);
         }
 
         // Also push into the next-turn context for all models.
         // We represent user turns as a pseudo-participant in shared history.
         // (The run loop rebuilds shared history only in-memory; this keeps it coherent during the session.)
-        ActiveState.PendingUserTurns.Add(new SharedTurn { ModelId = "user", ModelName = "User", Text = text, Round = round });
+        state.PendingUserTurns.Add(new SharedTurn { ModelId = "user", ModelName = "User", Text = text, Round = round });
 
         _userMessage = "";
         Conversations.NotifyChanged();
