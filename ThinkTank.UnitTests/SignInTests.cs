@@ -138,7 +138,12 @@ public class SignInTests
             File.WriteAllText(Path.Combine(dir.FullName, "providers.json"),
                 new JsonObject { ["AzureSql"] = new JsonObject { ["ClientId"] = "client-id", ["ClientSecret"] = "not-a-real-secret" } }.ToJsonString());
             var sp = ThinkTankDatabase.Resolve(empty, hosted: false, appDataRoot: root, env: _ => null)!;
-            Assert.That(sp, Does.Contain("Active Directory Service Principal").And.Contain("client-id").And.Contain("Initial Catalog=ThinkTank"));
+            // SqlClient writes the method as "Active Directory Service Principal" or "ActiveDirectoryServicePrincipal"
+            // depending on its version, so read it back through the builder rather than matching text.
+            var parsed = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(sp);
+            Assert.That(parsed.Authentication, Is.EqualTo(Microsoft.Data.SqlClient.SqlAuthenticationMethod.ActiveDirectoryServicePrincipal));
+            Assert.That(parsed.UserID, Is.EqualTo("client-id"));
+            Assert.That(parsed.InitialCatalog, Is.EqualTo("ThinkTank"));
         }
         finally
         {
