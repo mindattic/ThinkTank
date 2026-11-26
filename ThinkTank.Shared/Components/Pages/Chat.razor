@@ -701,7 +701,8 @@
 
     private async Task RestoreAllAsync()
     {
-        foreach (var c in Conversations.Conversations)
+        // Snapshot: the loop awaits, and a tab opened or closed meanwhile would break a live enumeration.
+        foreach (var c in Conversations.Conversations.ToList())
         {
             try
             {
