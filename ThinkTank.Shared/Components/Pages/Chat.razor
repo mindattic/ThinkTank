@@ -987,7 +987,17 @@
         // the history rebuilt above already carries it; appending it again would duplicate it.
         state.PendingUserTurns.Clear();
         Conversations.NotifyChanged();
-        await ChatStorage.AppendChatJsonAsync(active.ChatId, new { type = "chat-start", chatId = active.ChatId, topic = active.Topic, ts = DateTimeOffset.UtcNow });
+        // The chat-start line is bookkeeping: a disk error here must not leave the run stuck "Running"
+        // with its lease held, because nothing below would ever reset it.
+        try
+        {
+            await ChatStorage.AppendChatJsonAsync(active.ChatId, new { type = "chat-start", chatId = active.ChatId, topic = active.Topic, ts = DateTimeOffset.UtcNow }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            Log.LogWarning(ex, "chat-start entry could not be written for chat {ChatId}", active.ChatId);
+        }
 
         // Resume logic: if the last round in the saved log didn't include every
         // participant (e.g. the previous session was killed mid-round), finish
