@@ -53,7 +53,9 @@ public class HostingTests
     {
         var settings = new ThinkTankSettings { HstsMaxAgeDays = 30, ForwardLimit = 2 };
         var hosting = ThinkTankHosting.Read(
-            Config(("Hosting:Mode", "Public"), ("Hosting:AllowedHosts", "a.example; b.example")), settings, NoEnv);
+            Config(("Hosting:Mode", "Public"), ("Hosting:AllowedHosts", "a.example; b.example"),
+                ("Hosting:Auth:AllowedUsers", "admin"), ("Hosting:DataProtection:KeyRingPath", Path.Combine(Path.GetTempPath(), "thinktank-keys"))),
+            settings, NoEnv);
         Assert.That(hosting.IsPublic, Is.True);
         Assert.That(hosting.AllowedHosts, Is.EqualTo(new[] { "a.example", "b.example" }));
         Assert.That(hosting.HstsMaxAgeDays, Is.EqualTo(30));
