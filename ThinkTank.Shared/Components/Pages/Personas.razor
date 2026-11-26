@@ -367,7 +367,8 @@
         // In Claude fallback mode CallProvider routes every non-Claude persona through Claude, so the
         // key that matters is Claude's.
         var keyProvider = ThinkTankSettings.ClaudeFallbackMode ? "claude" : template.ProviderId;
-        var effectiveKey = ThinkTankSettings.GetKeyForProvider(keyProvider, null);
+        var effectiveKey = ThinkTankSettings.GetKeyForProvider(keyProvider,
+            ThinkTankSettings.ClaudeFallbackMode ? null : GetJsonString(template.AuthOverrideJson, "apiKey"));
         if (string.IsNullOrWhiteSpace(effectiveKey))
         {
             _lastError = "API key is required. Add one for this provider in MindAttic Vault (Settings cog).";
